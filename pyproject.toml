@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nopz"
+version = "0.1.0"
+description = "A tool for repeatedly running an agent against a set of conditions until they are met."
+authors = [
+    {name = "Alec"}
+]
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "google-generativeai",
+    "click",
+    "pyyaml"
+]
+
+[project.scripts]
+nopz = "nopz.cli:main"
