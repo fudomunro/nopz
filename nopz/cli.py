@@ -65,12 +65,6 @@ def main():
         default=10,
         help="Maximum number of agent loop iterations (default: 10).",
     )
-    parser.add_argument(
-        "--max-retries",
-        type=int,
-        default=10,
-        help="Maximum number of retries on agent error (default: 10).",
-    )
 
     args = parser.parse_args()
 
@@ -90,7 +84,6 @@ def main():
         agent=adapted_agent,
         conditions=conditions,
         max_iterations=args.max_iterations,
-        max_retries=args.max_retries,
     )
 
     try:

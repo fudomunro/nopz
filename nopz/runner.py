@@ -1,5 +1,4 @@
 import logging
-import time
 from typing import List, Protocol
 
 logger = logging.getLogger(__name__)
@@ -34,7 +33,6 @@ class Runner:
         agent: Agent,
         conditions: List[str],
         max_iterations: int = 10,
-        max_retries: int = 10,
     ):
         """
         Initialize the Runner.
@@ -43,12 +41,10 @@ class Runner:
             agent: The agent instance to use (e.g., Gemini-based agent).
             conditions: A list of conditions to enforce.
             max_iterations: The maximum number of times to prompt the agent before giving up.
-            max_retries: The maximum number of times to retry an iteration if the agent encounters an error.
         """
         self.agent = agent
         self.conditions = conditions
         self.max_iterations = max_iterations
-        self.max_retries = max_retries
 
     def run(self) -> bool:
         """
@@ -67,26 +63,12 @@ class Runner:
         for iteration in range(1, self.max_iterations + 1):
             logger.info(f"--- Iteration {iteration}/{self.max_iterations} ---")
 
-            action_taken = False
-            eval_success = False
-
-            for retry in range(1, self.max_retries + 1):
-                try:
-                    action_taken = self.agent.evaluate_and_act(self.conditions)
-                    eval_success = True
-                    break
-                except Exception as e:
-                    logger.error(
-                        f"Agent encountered an error (retry {retry}/{self.max_retries}): {e}"
-                    )
-                    if retry < self.max_retries:
-                        time.sleep(1.0)
-
-            if not eval_success:
-                logger.error(
-                    "Agent failed to complete evaluation after maximum retries."
-                )
-                raise Exception("Agent evaluation failed.")
+            try:
+                action_taken = self.agent.evaluate_and_act(self.conditions)
+            except Exception as e:
+                logger.error(f"Agent encountered an error: {e}")
+                # We can decide whether to abort or retry here. For now, abort.
+                raise
 
             if not action_taken:
                 logger.info("No action required by the agent. All conditions are met!")
