@@ -57,7 +57,9 @@ def main():
         description="Number One Point Zero (NOPZ) - Enforce conditions via AI agents.",
     )
     parser.add_argument(
-        "conditions_file", help="Path to the file containing the conditions to enforce."
+        "conditions_files",
+        nargs="+",
+        help="Path(s) to the file(s) containing the conditions to enforce.",
     )
     parser.add_argument(
         "--max-iterations",
@@ -68,9 +70,12 @@ def main():
 
     args = parser.parse_args()
 
-    conditions = load_conditions(args.conditions_file)
+    conditions = []
+    for file_path in args.conditions_files:
+        conditions.extend(load_conditions(file_path))
+
     if not conditions:
-        logging.warning("No conditions found in the provided file.")
+        logging.warning("No conditions found in the provided file(s).")
         sys.exit(0)
 
     # Initialize the agent (defaulting to Gemini)

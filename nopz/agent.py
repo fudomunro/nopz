@@ -3,7 +3,8 @@ import subprocess
 from abc import ABC, abstractmethod
 from typing import List
 
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 
 
 class Agent(ABC):
@@ -87,11 +88,15 @@ class GeminiAgent(Agent):
 
     def __init__(self, model: str = "gemini-2.5-pro"):
         self.model_name = model
-        # The genai library will automatically pick up the GOOGLE_API_KEY environment variable.
-        if not os.environ.get("GOOGLE_API_KEY"):
+
+        # Determine the API key
+        api_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
+        if not api_key:
             print(
-                "WARNING: GOOGLE_API_KEY environment variable is not set. API calls may fail."
+                "WARNING: Neither GOOGLE_API_KEY nor GEMINI_API_KEY environment variable is set. API calls may fail."
             )
+
+        self.client = genai.Client(api_key=api_key)
 
     def enforce_conditions(self, conditions: List[str]) -> bool:
         """
@@ -119,14 +124,17 @@ class GeminiAgent(Agent):
             "- Set `actions_taken` to false ONLY if ALL conditions were already perfectly met and you performed no modifications."
         )
 
-        model = genai.GenerativeModel(
-            model_name=self.model_name,
+        config = types.GenerateContentConfig(
             tools=tools,
             system_instruction=system_instruction,
+            temperature=0.0,
         )
 
         # 1. Start a fresh, independent chat session (no prior context).
-        chat = model.start_chat()
+        chat = self.client.chats.create(
+            model=self.model_name,
+            config=config,
+        )
 
         # 2. Provide ONLY the conditions to the model.
         prompt = "Here are the conditions you need to enforce:\n\n"
@@ -153,15 +161,16 @@ class GeminiAgent(Agent):
             )
 
             for fc in response.function_calls:
+                tool_args = fc.args or {}
+
                 if fc.name == "finish_run":
                     # The model has signaled it is done. Extract the self-reported boolean.
-                    actions_taken_result = bool(fc.args.get("actions_taken", True))
+                    actions_taken_result = bool(tool_args.get("actions_taken", True))
                     finished = True
                     break
 
                 # Execute other tools
                 tool_name = fc.name
-                tool_args = {k: v for k, v in fc.args.items()}
 
                 func_map = {
                     "read_file": read_file,
@@ -174,30 +183,22 @@ class GeminiAgent(Agent):
                     try:
                         result = func_map[tool_name](**tool_args)
                         tool_responses.append(
-                            {
-                                "function_response": {
-                                    "name": tool_name,
-                                    "response": {"result": str(result)},
-                                }
-                            }
+                            types.Part.from_function_response(
+                                name=tool_name, response={"result": str(result)}
+                            )
                         )
                     except Exception as e:
                         tool_responses.append(
-                            {
-                                "function_response": {
-                                    "name": tool_name,
-                                    "response": {"error": str(e)},
-                                }
-                            }
+                            types.Part.from_function_response(
+                                name=tool_name, response={"error": str(e)}
+                            )
                         )
                 else:
                     tool_responses.append(
-                        {
-                            "function_response": {
-                                "name": tool_name,
-                                "response": {"error": f"Unknown tool: {tool_name}"},
-                            }
-                        }
+                        types.Part.from_function_response(
+                            name=tool_name,
+                            response={"error": f"Unknown tool: {tool_name}"},
+                        )
                     )
 
             if finished:

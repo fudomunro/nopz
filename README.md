@@ -17,9 +17,15 @@
 - **Default Agent:** Google Gemini (with plans to support others)
 - **Interface:** CLI
 
+## Setup
+
+NOPZ currently defaults to using Google Gemini. You must set your API key as an environment variable before running the tool:
+
+    $ export GOOGLE_API_KEY="your_api_key_here"
+
 ## Usage
 
-    $ nopz conditions.txt
+    $ uv run nopz conditions.txt
 
 ## Roadmap
 

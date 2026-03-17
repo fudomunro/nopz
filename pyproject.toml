@@ -10,12 +10,20 @@ authors = [
     {name = "Alec"}
 ]
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.13"
 dependencies = [
-    "google-generativeai",
+    "google-genai",
     "click",
     "pyyaml"
 ]
 
+[project.optional-dependencies]
+dev = [
+    "pytest",
+]
+
 [project.scripts]
 nopz = "nopz.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["nopz", "nopz.*"]
