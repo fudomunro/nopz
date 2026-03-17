@@ -42,6 +42,14 @@ class Runner:
             conditions: A list of conditions to enforce.
             max_iterations: The maximum number of times to prompt the agent before giving up.
         """
+        import logging
+
+        self.logger = logging.getLogger(__name__)
+        self.logger.debug(
+            "Runner initialized with %d conditions and max_iterations=%d",
+            len(conditions),
+            max_iterations,
+        )
         self.agent = agent
         self.conditions = conditions
         self.max_iterations = max_iterations

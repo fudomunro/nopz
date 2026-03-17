@@ -58,8 +58,19 @@ def main():
     )
     parser.add_argument(
         "conditions_files",
-        nargs="+",
+        nargs="*",
         help="Path(s) to the file(s) containing the conditions to enforce.",
+    )
+    parser.add_argument(
+        "--list-models",
+        action="store_true",
+        help="List available Gemini models and exit.",
+    )
+    parser.add_argument(
+        "--model",
+        type=str,
+        default="gemini-2.5-pro",
+        help="Specify the model to use (default: gemini-2.5-pro).",
     )
     parser.add_argument(
         "--max-iterations",
@@ -67,8 +78,41 @@ def main():
         default=10,
         help="Maximum number of agent loop iterations (default: 10).",
     )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Enable debug logging.",
+    )
 
     args = parser.parse_args()
+
+    if args.debug:
+        logging.getLogger().setLevel(logging.DEBUG)
+
+    if args.list_models:
+        import os
+
+        from google import genai
+
+        api_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
+        if not api_key:
+            logging.error(
+                "Neither GOOGLE_API_KEY nor GEMINI_API_KEY environment variable is set."
+            )
+            sys.exit(1)
+
+        client = genai.Client(api_key=api_key)
+        print("Available models:")
+        try:
+            for m in client.models.list():
+                print(f"  - {m.name}")
+        except Exception as e:
+            logging.error(f"Failed to list models: {e}")
+            sys.exit(1)
+        sys.exit(0)
+
+    if not args.conditions_files:
+        parser.error("the following arguments are required: conditions_files")
 
     conditions = []
     for file_path in args.conditions_files:
@@ -79,7 +123,7 @@ def main():
         sys.exit(0)
 
     # Initialize the agent (defaulting to Gemini)
-    raw_agent = GeminiAgent()
+    raw_agent = GeminiAgent(model=args.model)
 
     # Adapt the agent to match the Runner's expected protocol
     adapted_agent = AgentAdapter(raw_agent)

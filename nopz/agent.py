@@ -1,3 +1,4 @@
+import logging
 import os
 import subprocess
 from abc import ABC, abstractmethod
@@ -5,6 +6,8 @@ from typing import List
 
 from google import genai
 from google.genai import types
+
+logger = logging.getLogger(__name__)
 
 
 class Agent(ABC):
@@ -92,8 +95,8 @@ class GeminiAgent(Agent):
         # Determine the API key
         api_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
         if not api_key:
-            print(
-                "WARNING: Neither GOOGLE_API_KEY nor GEMINI_API_KEY environment variable is set. API calls may fail."
+            logger.warning(
+                "Neither GOOGLE_API_KEY nor GEMINI_API_KEY environment variable is set. API calls may fail."
             )
 
         self.client = genai.Client(api_key=api_key)
@@ -102,7 +105,7 @@ class GeminiAgent(Agent):
         """
         Evaluate conditions using Gemini and take necessary actions independently.
         """
-        print(
+        logger.info(
             f"GeminiAgent is independently evaluating {len(conditions)} condition(s)..."
         )
 
@@ -128,9 +131,13 @@ class GeminiAgent(Agent):
             tools=tools,
             system_instruction=system_instruction,
             temperature=0.0,
+            automatic_function_calling=types.AutomaticFunctionCallingConfig(
+                disable=True
+            ),
         )
 
         # 1. Start a fresh, independent chat session (no prior context).
+        logger.debug(f"Starting chat session with model {self.model_name}")
         chat = self.client.chats.create(
             model=self.model_name,
             config=config,
@@ -142,12 +149,21 @@ class GeminiAgent(Agent):
             prompt += f"{i}. {c}\n"
         prompt += "\nPlease inspect the environment, make any necessary changes, and then call finish_run."
 
+        logger.debug("Sending initial prompt to the model...")
         response = chat.send_message(prompt)
 
         # Execution loop for tools
         max_turns = 30
-        for _ in range(max_turns):
+        for turn_num in range(1, max_turns + 1):
+            logger.debug(f"--- Turn {turn_num} ---")
+
+            if response.text:
+                logger.debug(f"Model response text:\n{response.text}")
+
             if not response.function_calls:
+                logger.debug(
+                    "No function calls in response. Prompting model to use finish_run."
+                )
                 # If the model didn't call any tools (including finish_run), prompt it to do so.
                 response = chat.send_message(
                     "Please use the finish_run tool to report your status and conclude the run."
@@ -163,9 +179,15 @@ class GeminiAgent(Agent):
             for fc in response.function_calls:
                 tool_args = fc.args or {}
 
+                logger.debug(f"Model called tool: {fc.name} with args: {tool_args}")
+
                 if fc.name == "finish_run":
                     # The model has signaled it is done. Extract the self-reported boolean.
-                    actions_taken_result = bool(tool_args.get("actions_taken", True))
+                    val = tool_args.get("actions_taken", True)
+                    if isinstance(val, str):
+                        actions_taken_result = val.lower() == "true"
+                    else:
+                        actions_taken_result = bool(val)
                     finished = True
                     break
 
@@ -182,18 +204,21 @@ class GeminiAgent(Agent):
                 if tool_name in func_map:
                     try:
                         result = func_map[tool_name](**tool_args)
+                        logger.debug(f"Tool {tool_name} returned successfully.")
                         tool_responses.append(
                             types.Part.from_function_response(
                                 name=tool_name, response={"result": str(result)}
                             )
                         )
                     except Exception as e:
+                        logger.debug(f"Tool {tool_name} raised exception: {e}")
                         tool_responses.append(
                             types.Part.from_function_response(
                                 name=tool_name, response={"error": str(e)}
                             )
                         )
                 else:
+                    logger.debug(f"Unknown tool called: {tool_name}")
                     tool_responses.append(
                         types.Part.from_function_response(
                             name=tool_name,
@@ -202,12 +227,18 @@ class GeminiAgent(Agent):
                     )
 
             if finished:
+                logger.debug(
+                    f"Model signaled finish_run. Actions taken: {actions_taken_result}"
+                )
                 return actions_taken_result
 
             # Send tool execution results back to the model to continue the loop
             if tool_responses:
+                logger.debug(
+                    f"Sending {len(tool_responses)} tool response(s) back to the model."
+                )
                 response = chat.send_message(tool_responses)
 
-        print("WARNING: GeminiAgent exceeded maximum turns without calling finish_run.")
+        logger.warning("GeminiAgent exceeded maximum turns without calling finish_run.")
         # We assume actions were taken to force another run iteration and prevent premature convergence.
         return True
