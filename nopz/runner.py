@@ -1,5 +1,5 @@
 import logging
-from typing import List, Protocol
+from typing import List, Protocol, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -7,7 +7,7 @@ logger = logging.getLogger(__name__)
 class Agent(Protocol):
     """Protocol defining the interface for a NOPZ agent."""
 
-    def evaluate_and_act(self, conditions: List[str]) -> bool:
+    def evaluate_and_act(self, conditions: List[str]) -> Tuple[bool, str]:
         """
         Independently evaluate the given conditions and take actions if any conditions
         are not met. The agent determines entirely on its own if work was required.
@@ -16,8 +16,8 @@ class Agent(Protocol):
             conditions: A list of strings representing the desired state or rules.
 
         Returns:
-            bool: True if the agent had to take an action to satisfy the conditions.
-                  False if no action was required (conditions are already met).
+            Tuple[bool, str]: True if the agent had to take an action to satisfy the
+                              conditions, and a string summary of the work completed.
         """
         ...
 
@@ -68,11 +68,14 @@ class Runner:
 
         logger.info(f"Starting NOPZ run with {len(self.conditions)} conditions.")
 
+        timeline = []
+
         for iteration in range(1, self.max_iterations + 1):
             logger.info(f"--- Iteration {iteration}/{self.max_iterations} ---")
 
             try:
-                action_taken = self.agent.evaluate_and_act(self.conditions)
+                action_taken, summary = self.agent.evaluate_and_act(self.conditions)
+                timeline.append(f"Iteration {iteration}: {summary}")
             except Exception as e:
                 logger.error(f"Agent encountered an error: {e}")
                 # We can decide whether to abort or retry here. For now, abort.
@@ -80,6 +83,11 @@ class Runner:
 
             if not action_taken:
                 logger.info("No action required by the agent. All conditions are met!")
+
+                logger.info("--- Timeline of Activity ---")
+                for entry in timeline:
+                    logger.info(entry)
+
                 logger.info("You are technically correct. The BEST kind of correct.")
                 return True
 
@@ -91,4 +99,7 @@ class Runner:
         logger.warning(
             f"Reached maximum iterations ({self.max_iterations}) without reaching a stable state."
         )
+        logger.info("--- Timeline of Activity ---")
+        for entry in timeline:
+            logger.info(entry)
         return False

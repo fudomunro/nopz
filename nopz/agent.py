@@ -2,7 +2,7 @@ import logging
 import os
 import subprocess
 from abc import ABC, abstractmethod
-from typing import List
+from typing import List, Tuple
 
 from google import genai
 from google.genai import types
@@ -14,7 +14,7 @@ class Agent(ABC):
     """Base class for all NOPZ agents."""
 
     @abstractmethod
-    def enforce_conditions(self, conditions: List[str]) -> bool:
+    def enforce_conditions(self, conditions: List[str]) -> Tuple[bool, str]:
         """
         Evaluate the conditions and take action if they are not met.
 
@@ -27,10 +27,12 @@ class Agent(ABC):
             conditions: A list of conditions to evaluate.
 
         Returns:
-            bool: True if the agent performed any actions to satisfy the conditions.
-                  False if the agent determined all conditions were already met
-                  and no actions were required. External verification is not used;
-                  we trust the agent's report.
+            Tuple[bool, str]: A tuple containing:
+                - bool: True if the agent performed any actions to satisfy the conditions.
+                        False if the agent determined all conditions were already met
+                        and no actions were required. External verification is not used;
+                        we trust the agent's report.
+                - str: A summary of the work completed during this run, or why no work was needed.
         """
         pass
 
@@ -38,11 +40,16 @@ class Agent(ABC):
 # --- Tools for the Agent ---
 
 
-def read_file(path: str) -> str:
-    """Reads the content of a file."""
+def read_file(path: str, offset: int = 0, limit: int = 4000) -> str:
+    """Reads the content of a file in chunks. Use offset and limit to read large files."""
     try:
         with open(path, "r", encoding="utf-8") as f:
-            return f.read()
+            f.seek(offset)
+            content = f.read(limit)
+            has_more = len(f.read(1)) > 0
+            if has_more:
+                content += f"\n...[TRUNCATED. Read more with offset={offset + limit}]"
+            return content
     except Exception as e:
         return f"Error reading file: {e}"
 
@@ -67,21 +74,54 @@ def list_directory(path: str) -> str:
         return f"Error listing directory: {e}"
 
 
-def execute_shell_command(command: str) -> str:
-    """Executes a shell command and returns its stdout and stderr."""
+def execute_shell_command(command: str, timeout: int = 120) -> str:
+    """Executes a shell command and returns its stdout and stderr. Large outputs are written to files."""
+    import signal
+
     try:
-        result = subprocess.run(command, shell=True, capture_output=True, text=True)
-        return f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}\nEXIT CODE: {result.returncode}"
+        with subprocess.Popen(
+            command,
+            shell=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            preexec_fn=os.setsid,
+        ) as process:
+            try:
+                stdout, stderr = process.communicate(timeout=timeout)
+                exit_code = process.returncode
+            except subprocess.TimeoutExpired:
+                os.killpg(process.pid, signal.SIGKILL)
+                stdout, stderr = process.communicate()
+                exit_code = "TIMEOUT"
     except Exception as e:
         return f"Error executing command: {e}"
 
+    res = f"EXIT CODE: {exit_code}\n"
+    if len(stdout) > 4000:
+        with open(".nopz_stdout.txt", "w", encoding="utf-8") as f:
+            f.write(stdout)
+        res += "STDOUT: Output too large, written to .nopz_stdout.txt\n"
+    else:
+        res += f"STDOUT:\n{stdout}\n"
 
-def finish_run(actions_taken: bool) -> str:
+    if len(stderr) > 4000:
+        with open(".nopz_stderr.txt", "w", encoding="utf-8") as f:
+            f.write(stderr)
+        res += "STDERR: Output too large, written to .nopz_stderr.txt\n"
+    else:
+        res += f"STDERR:\n{stderr}\n"
+
+    return res
+
+
+def finish_run(actions_taken: bool, summary: str) -> str:
     """
     Call this tool when you have finished evaluating and (if necessary) enforcing the conditions.
 
     Args:
         actions_taken: True if you had to perform ANY actions (e.g. creating files, modifying files, running shell commands) to satisfy the conditions. False if ALL conditions were already met and you only inspected the state.
+        summary: A concise summary of the actions you took, or an explanation of why no actions were required.
     """
     return "Run finished."
 
@@ -99,9 +139,9 @@ class GeminiAgent(Agent):
                 "Neither GOOGLE_API_KEY nor GEMINI_API_KEY environment variable is set. API calls may fail."
             )
 
-        self.client = genai.Client(api_key=api_key)
+        self.client = genai.Client(api_key=api_key, http_options={"timeout": 600000})
 
-    def enforce_conditions(self, conditions: List[str]) -> bool:
+    def enforce_conditions(self, conditions: List[str]) -> Tuple[bool, str]:
         """
         Evaluate conditions using Gemini and take necessary actions independently.
         """
@@ -123,8 +163,9 @@ class GeminiAgent(Agent):
             "You MUST use the provided tools to inspect the environment to see if conditions are met.\n"
             "If conditions are not met, you MUST use the tools to modify the environment so they become true.\n"
             "When you are completely finished, you MUST call the `finish_run` tool.\n"
-            "- Set `actions_taken` to true if you had to perform any actions (e.g., executing commands, writing files) to satisfy the conditions.\n"
-            "- Set `actions_taken` to false ONLY if ALL conditions were already perfectly met and you performed no modifications."
+            "- Set `actions_taken` to true if you had to perform any actions (e.g., executing state-changing commands, writing or modifying files) to satisfy the conditions.\n"
+            "- Set `actions_taken` to false ONLY if ALL conditions were already perfectly met and you only performed read-only operations (e.g., reading files, running tests that passed without requiring any fixes).\n"
+            "- Set `summary` to a concise description of what you did or why no actions were needed."
         )
 
         config = types.GenerateContentConfig(
@@ -153,7 +194,7 @@ class GeminiAgent(Agent):
         response = chat.send_message(prompt)
 
         # Execution loop for tools
-        max_turns = 30
+        max_turns = 100
         for turn_num in range(1, max_turns + 1):
             logger.debug(f"--- Turn {turn_num} ---")
 
@@ -175,6 +216,7 @@ class GeminiAgent(Agent):
             actions_taken_result = (
                 True  # Default to True in case of early exit/parsing failure
             )
+            summary_result = "No summary provided."
 
             for fc in response.function_calls:
                 tool_args = fc.args or {}
@@ -188,6 +230,9 @@ class GeminiAgent(Agent):
                         actions_taken_result = val.lower() == "true"
                     else:
                         actions_taken_result = bool(val)
+                    summary_result = str(
+                        tool_args.get("summary", "No summary provided.")
+                    )
                     finished = True
                     break
 
@@ -228,9 +273,9 @@ class GeminiAgent(Agent):
 
             if finished:
                 logger.debug(
-                    f"Model signaled finish_run. Actions taken: {actions_taken_result}"
+                    f"Model signaled finish_run. Actions taken: {actions_taken_result}, Summary: {summary_result}"
                 )
-                return actions_taken_result
+                return actions_taken_result, summary_result
 
             # Send tool execution results back to the model to continue the loop
             if tool_responses:
@@ -241,4 +286,4 @@ class GeminiAgent(Agent):
 
         logger.warning("GeminiAgent exceeded maximum turns without calling finish_run.")
         # We assume actions were taken to force another run iteration and prevent premature convergence.
-        return True
+        return True, "Exceeded maximum turns without calling finish_run."

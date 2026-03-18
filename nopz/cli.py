@@ -1,5 +1,6 @@
 import argparse
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -18,7 +19,7 @@ class AgentAdapter:
     def __init__(self, agent):
         self.agent = agent
 
-    def evaluate_and_act(self, conditions: list[str]) -> bool:
+    def evaluate_and_act(self, conditions: list[str]) -> tuple[bool, str]:
         # Map to the method defined in agent.py
         return self.agent.enforce_conditions(conditions)
 
@@ -73,6 +74,11 @@ def main():
         help="Specify the model to use (default: gemini-2.5-pro).",
     )
     parser.add_argument(
+        "--output",
+        type=str,
+        help="Directory where agent activity should happen.",
+    )
+    parser.add_argument(
         "--max-iterations",
         type=int,
         default=10,
@@ -90,8 +96,6 @@ def main():
         logging.getLogger().setLevel(logging.DEBUG)
 
     if args.list_models:
-        import os
-
         from google import genai
 
         api_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
@@ -121,6 +125,11 @@ def main():
     if not conditions:
         logging.warning("No conditions found in the provided file(s).")
         sys.exit(0)
+
+    if args.output:
+        output_dir = Path(args.output)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        os.chdir(output_dir)
 
     # Initialize the agent (defaulting to Gemini)
     raw_agent = GeminiAgent(model=args.model)

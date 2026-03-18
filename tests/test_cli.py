@@ -1,8 +1,10 @@
+import os
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
-from nopz.cli import load_conditions
+from nopz.cli import load_conditions, main
 
 
 def test_load_conditions_plain_text(tmp_path: Path):
@@ -55,3 +57,29 @@ wrong_key:
     with pytest.raises(SystemExit) as excinfo:
         load_conditions(str(test_file))
     assert excinfo.value.code == 1
+
+
+def test_main_with_output(tmp_path: Path):
+    test_file = tmp_path / "conditions.txt"
+    test_file.write_text("Condition 1\n")
+    output_dir = tmp_path / "output_dir"
+
+    original_cwd = os.getcwd()
+
+    try:
+        with (
+            patch("sys.argv", ["nopz", str(test_file), "--output", str(output_dir)]),
+            patch("nopz.cli.GeminiAgent"),
+            patch("nopz.cli.Runner") as MockRunner,
+        ):
+            instance = MockRunner.return_value
+            instance.run.return_value = True
+
+            with pytest.raises(SystemExit) as excinfo:
+                main()
+
+            assert excinfo.value.code == 0
+            assert output_dir.exists()
+            assert os.getcwd() == str(output_dir)
+    finally:
+        os.chdir(original_cwd)
