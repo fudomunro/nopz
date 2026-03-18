@@ -6,7 +6,7 @@ from pathlib import Path
 
 import yaml
 
-from nopz.agent import GeminiAgent
+from nopz.agent import LLMAgent
 from nopz.runner import Runner
 
 # Setup basic logging
@@ -65,7 +65,7 @@ def main():
     parser.add_argument(
         "--list-models",
         action="store_true",
-        help="List available Gemini models and exit.",
+        help="List available models and exit.",
     )
     parser.add_argument(
         "--model",
@@ -96,20 +96,13 @@ def main():
         logging.getLogger().setLevel(logging.DEBUG)
 
     if args.list_models:
-        from google import genai
+        import llm
 
-        api_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
-        if not api_key:
-            logging.error(
-                "Neither GOOGLE_API_KEY nor GEMINI_API_KEY environment variable is set."
-            )
-            sys.exit(1)
-
-        client = genai.Client(api_key=api_key)
         print("Available models:")
         try:
-            for m in client.models.list():
-                print(f"  - {m.name}")
+            # llm.get_models() is available in recent llm versions
+            for m in llm.get_models():
+                print(f"  - {m.model_id}")
         except Exception as e:
             logging.error(f"Failed to list models: {e}")
             sys.exit(1)
@@ -131,8 +124,8 @@ def main():
         output_dir.mkdir(parents=True, exist_ok=True)
         os.chdir(output_dir)
 
-    # Initialize the agent (defaulting to Gemini)
-    raw_agent = GeminiAgent(model=args.model)
+    # Initialize the agent
+    raw_agent = LLMAgent(model=args.model)
 
     # Adapt the agent to match the Runner's expected protocol
     adapted_agent = AgentAdapter(raw_agent)

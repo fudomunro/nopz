@@ -12,9 +12,10 @@ authors = [
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "google-genai",
     "click",
-    "pyyaml"
+    "pyyaml",
+    "llm>=0.29",
+    "llm-gemini>=0.29",
 ]
 
 [project.optional-dependencies]
