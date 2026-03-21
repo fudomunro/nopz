@@ -19,7 +19,7 @@ class AgentAdapter:
     def __init__(self, agent):
         self.agent = agent
 
-    def evaluate_and_act(self, conditions: list[str]) -> tuple[bool, str]:
+    def evaluate_and_act(self, conditions: list[str]) -> tuple[bool, str, dict]:
         # Map to the method defined in agent.py
         return self.agent.enforce_conditions(conditions)
 

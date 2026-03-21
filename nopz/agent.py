@@ -14,9 +14,10 @@ class RunFinishedException(BaseException):
     """Exception raised when the agent calls the finish_run tool to signal completion.
     Inherits from BaseException to bypass llm's internal Exception catch block."""
 
-    def __init__(self, actions_taken: bool, summary: str):
+    def __init__(self, actions_taken: bool, summary: str, usage: dict | None = None):
         self.actions_taken = actions_taken
         self.summary = summary
+        self.usage = usage or {}
         super().__init__(summary)
 
 
@@ -24,7 +25,7 @@ class Agent(ABC):
     """Base class for all NOPZ agents."""
 
     @abstractmethod
-    def enforce_conditions(self, conditions: List[str]) -> Tuple[bool, str]:
+    def enforce_conditions(self, conditions: List[str]) -> Tuple[bool, str, dict]:
         """
         Evaluate the conditions and take action if they are not met.
 
@@ -37,12 +38,13 @@ class Agent(ABC):
             conditions: A list of conditions to evaluate.
 
         Returns:
-            Tuple[bool, str]: A tuple containing:
+            Tuple[bool, str, dict]: A tuple containing:
                 - bool: True if the agent performed any actions to satisfy the conditions.
                         False if the agent determined all conditions were already met
                         and no actions were required. External verification is not used;
                         we trust the agent's report.
                 - str: A summary of the work completed during this run, or why no work was needed.
+                - dict: Token usage information for this run.
         """
         pass
 
@@ -152,7 +154,7 @@ class LLMAgent(Agent):
     def __init__(self, model: str = "gemini-2.5-pro"):
         self.model_name = model
 
-    def enforce_conditions(self, conditions: List[str]) -> Tuple[bool, str]:
+    def enforce_conditions(self, conditions: List[str]) -> Tuple[bool, str, dict]:
         """
         Evaluate conditions using the specified model and take necessary actions independently.
         """
@@ -165,7 +167,7 @@ class LLMAgent(Agent):
         except llm.UnknownModelError:
             error_msg = f"Model '{self.model_name}' not found. Make sure the appropriate llm plugin is installed."
             logger.error(error_msg)
-            return True, error_msg
+            return True, error_msg, {}
 
         # If it's a Gemini model, we can inject the key from standard Google env vars.
         # Otherwise, we rely on the llm library's native key management for that model.
@@ -207,6 +209,15 @@ class LLMAgent(Agent):
         logger.debug(f"Starting chat session with model {self.model_name}")
         conversation = model.conversation()
 
+        def get_usage(chain_response):
+            input_tokens = 0
+            output_tokens = 0
+            # ChainResponse stores individual Response objects in _responses
+            for r in getattr(chain_response, "_responses", []):
+                input_tokens += getattr(r, "input_tokens", 0) or 0
+                output_tokens += getattr(r, "output_tokens", 0) or 0
+            return {"input": input_tokens, "output": output_tokens}
+
         try:
             logger.debug("Sending initial prompt to the model...")
             # The chain function handles looping back tool responses automatically.
@@ -217,21 +228,30 @@ class LLMAgent(Agent):
                 chain_limit=100,
             )
 
-            # Drive the generator to trigger tool execution
-            for _ in response:
-                pass
+            try:
+                # Drive the generator to trigger tool execution
+                for _ in response:
+                    pass
+            except RunFinishedException as e:
+                # Inject usage into the exception so it can be returned
+                e.usage = get_usage(response)
+                raise e
 
             logger.warning(
                 "LLMAgent exceeded maximum turns without calling finish_run."
             )
             # We assume actions were taken to force another run iteration and prevent premature convergence.
-            return True, "Exceeded maximum turns without calling finish_run."
+            return (
+                True,
+                "Exceeded maximum turns without calling finish_run.",
+                get_usage(response),
+            )
 
         except RunFinishedException as e:
             logger.debug(
-                f"Model signaled finish_run. Actions taken: {e.actions_taken}, Summary: {e.summary}"
+                f"Model signaled finish_run. Actions taken: {e.actions_taken}, Summary: {e.summary}, Usage: {e.usage}"
             )
-            return e.actions_taken, e.summary
+            return e.actions_taken, e.summary, e.usage
         except Exception as e:
             logger.error(f"Error during agent execution: {e}")
-            return True, f"Error: {e}"
+            return True, f"Error: {e}", {}
