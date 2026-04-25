@@ -17,3 +17,8 @@ The following conditions apply to all development tasks within the `power_tracke
 
 ## 4. Testing
 - Provide basic tests for all business logic and data processing modules.
+- Test coverage should exceed 95%.
+
+## 5. Execution
+- There should be a simple way to run the application.
+- When running the application, the only output should describe actions taken or state changes, and should not include warnings or other content.
