@@ -4,34 +4,39 @@ A real-time web application that tracks the 10 most powerful people in the world
 
 ## What is Power Tracker?
 
-Power Tracker is a web application designed to:
-1. List the 10 most powerful people in the world, ranked by their influence.
-2. Track and stream their activities in real-time via a live feed.
+Power Tracker is a web application that:
+1. Lists the 10 most powerful people in the world, ranked by influence.
+2. Generates simulated activities for them at random intervals.
+3. Streams those activities in real-time via Server-Sent Events.
+
+**Backend:** FastAPI + SSE | **Frontend:** Vanilla SPA | **Storage:** In-memory
 
 ## NOPZ Regulations
 
-This application is built using NOPZ's regulation-based architecture. Regulations are Python functions that validate whether the codebase meets specific requirements.
+This application is governed by NOPZ regulations — Python functions that validate whether the codebase meets specific requirements. The NOPZ clerk makes changes, and the beaurocrat checks regulations. On success, changes merge automatically. On failure, the clerk retries with failure context.
 
 ### Regulation Files
 
-*   [`dev_standards.py`](./dev_standards.py) — General development standards: PEP 8, type hints, test coverage, dependencies.
-*   [`backend.py`](./backend.py) — Backend regulations: FastAPI framework, data models, API endpoints, error handling.
-*   [`data_source.py`](./data_source.py) — Data regulations: seeding, storage, mock generation, activity capping.
-*   [`frontend.py`](./frontend.py) — Frontend regulations: SPA structure, real-time feed, reconnection handling.
+| File | Domain | Regulations |
+|------|--------|-------------|
+| [`dev_standards.py`](./dev_standards.py) | Development | PEP 8, type hints, test coverage, dependencies |
+| [`backend.py`](./backend.py) | Backend | FastAPI, CORS, models, endpoints, SSE, error handling |
+| [`data_source.py`](./data_source.py) | Data | Seeding, thread safety, generator, activity cap |
+| [`frontend.py`](./frontend.py) | Frontend | SPA, people display, live feed, reconnection |
 
 ### Running NOPZ
 
 ```bash
-# Run all regulations
-uv run nopz dev_standards.py --output ./runs/my_run
+# Run all regulations against a target directory
+uv run nopz dev_standards.py backend.py data_source.py frontend.py --output ./runs/my_run
 
-# Run specific domain
+# Run a single domain
 uv run nopz backend.py --output ./runs/my_run --clerk-model gemini-2.5-pro
 ```
 
-The NOPZ clerk will make changes on a branch, and the beaurocrat will validate regulations. On success, changes merge automatically. On failure, the clerk retries with failure context.
-
 ## Running the Application
+
+The most complete implementation is in `runs/power_tracker_12/power_tracker/`:
 
 ```bash
 cd runs/power_tracker_12/power_tracker
@@ -40,3 +45,7 @@ pip install -r requirements.txt
 ```
 
 The backend starts on port 8000. Open `http://localhost:8000` in your browser.
+
+## Previous Runs
+
+The `runs/` directory contains outputs from earlier NOPZ agent runs, showing iterative progress toward satisfying all regulations. Each run represents a complete attempt by the clerk/beaurocrat cycle.
