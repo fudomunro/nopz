@@ -69,7 +69,7 @@ def test_main_with_output(tmp_path: Path):
     try:
         with (
             patch("sys.argv", ["nopz", str(test_file), "--output", str(output_dir)]),
-            patch("nopz.cli.GeminiAgent"),
+            patch("nopz.cli.LLMAgent"),
             patch("nopz.cli.Runner") as MockRunner,
         ):
             instance = MockRunner.return_value

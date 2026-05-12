@@ -89,6 +89,12 @@ def main():
         action="store_true",
         help="Enable debug logging.",
     )
+    parser.add_argument(
+        "--mimo-server",
+        type=str,
+        default=None,
+        help="Base URL for MiMo API server (e.g., http://localhost:9001/v1).",
+    )
 
     args = parser.parse_args()
 
@@ -125,7 +131,7 @@ def main():
         os.chdir(output_dir)
 
     # Initialize the agent
-    raw_agent = LLMAgent(model=args.model)
+    raw_agent = LLMAgent(model=args.model, base_url=args.mimo_server)
 
     # Adapt the agent to match the Runner's expected protocol
     adapted_agent = AgentAdapter(raw_agent)

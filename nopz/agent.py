@@ -3,9 +3,11 @@ import os
 import signal
 import subprocess
 from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import List, Tuple
 
 import llm
+import yaml
 
 logger = logging.getLogger(__name__)
 
@@ -148,11 +150,47 @@ def finish_run(actions_taken: bool, summary: str) -> str:
     raise RunFinishedException(actions_taken, str(summary))
 
 
-class LLMAgent(Agent):
-    """An agent powered by the llm library (supports Gemini, OpenAI, Claude, etc)."""
+def _register_extra_model(model_id: str) -> None:
+    """Register a custom OpenAI-compatible model in the llm library's extra models config.
 
-    def __init__(self, model: str = "gemini-2.5-pro"):
+    Note: api_base is NOT set here because the llm plugin treats it as "no key needed"
+    and uses a dummy key. Instead, api_base is set on the model object directly.
+    """
+    config_path = Path(llm.user_dir()) / "extra-openai-models.yaml"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+
+    existing = []
+    if config_path.exists():
+        with open(config_path, "r") as f:
+            existing = yaml.safe_load(f) or []
+
+    # Update or add the model entry (without api_base)
+    updated = False
+    for entry in existing:
+        if entry.get("model_id") == model_id:
+            entry["supports_tools"] = True
+            updated = True
+            break
+
+    if not updated:
+        existing.append({
+            "model_id": model_id,
+            "model_name": model_id,
+            "supports_tools": True,
+        })
+
+    with open(config_path, "w") as f:
+        yaml.dump(existing, f, default_flow_style=False)
+
+    logger.debug(f"Registered model '{model_id}' in {config_path}")
+
+
+class LLMAgent(Agent):
+    """An agent powered by the llm library (supports Gemini, OpenAI, Claude, MiMo, etc)."""
+
+    def __init__(self, model: str = "gemini-2.5-pro", base_url: str | None = None):
         self.model_name = model
+        self.base_url = base_url
 
     def enforce_conditions(self, conditions: List[str]) -> Tuple[bool, str, dict]:
         """
@@ -161,6 +199,10 @@ class LLMAgent(Agent):
         logger.info(
             f"LLMAgent ({self.model_name}) is independently evaluating {len(conditions)} condition(s)..."
         )
+
+        # Auto-register custom OpenAI-compatible models when base_url is provided
+        if self.base_url:
+            _register_extra_model(self.model_name)
 
         try:
             model = llm.get_model(self.model_name)
@@ -181,6 +223,16 @@ class LLMAgent(Agent):
                 logger.warning(
                     "Neither GOOGLE_API_KEY nor GEMINI_API_KEY environment variable is set. API calls may fail depending on the model."
                 )
+
+        # MiMo key injection (for servers that require auth)
+        if "mimo" in self.model_name.lower():
+            api_key = os.environ.get("MIMO_API_KEY")
+            if api_key:
+                model.key = api_key
+
+        # Override base URL if provided (for MiMo or other OpenAI-compatible servers)
+        if self.base_url:
+            model.api_base = self.base_url
 
         tools = [
             read_file,
