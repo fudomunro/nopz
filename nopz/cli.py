@@ -102,11 +102,30 @@ def main():
         default=None,
         help="Base URL for MiMo API server.",
     )
+    parser.add_argument(
+        "--log-file",
+        type=str,
+        default=None,
+        help="Path to logfile. Defaults to {output}/nopz.log when --output is set.",
+    )
 
     args = parser.parse_args()
 
     if args.debug:
         logging.getLogger().setLevel(logging.DEBUG)
+
+    # Set up file logging
+    log_file = args.log_file
+    if not log_file and args.output:
+        log_file = os.path.join(args.output, "nopz.log")
+    if log_file:
+        log_path = Path(log_file)
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        file_handler = logging.FileHandler(log_path)
+        file_handler.setFormatter(
+            logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+        )
+        logging.getLogger().addHandler(file_handler)
 
     if args.list_models:
         import llm
