@@ -53,8 +53,9 @@ def main():
         description="Number One Point Zero (NOPZ) — enforce regulations via AI agents.",
     )
     parser.add_argument(
-        "regulations_file",
-        help="Path to a Python file defining regulations with @regulation.",
+        "regulations_files",
+        nargs="+",
+        help="Path(s) to Python file(s) defining regulations with @regulation.",
     )
     parser.add_argument(
         "--clerk-model",
@@ -114,8 +115,10 @@ def main():
             print(f"  - {m.model_id}")
         sys.exit(0)
 
-    # Load regulations
-    regulations = load_regulations(args.regulations_file)
+    # Load regulations from all files
+    regulations = []
+    for file_path in args.regulations_files:
+        regulations.extend(load_regulations(file_path))
     if not regulations:
         logging.error("No regulations found. Nothing to do.")
         sys.exit(1)
