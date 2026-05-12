@@ -22,14 +22,16 @@ def _setup_model(model_name: str, base_url: Optional[str] = None) -> llm.Model:
         from nopz.agent import _register_extra_model
         _register_extra_model(model_name)
 
+    # Inject API keys before get_model — OpenAI plugin checks env var immediately
+    if "mimo" in model_name.lower():
+        mimo_key = os.environ.get("MIMO_API_KEY")
+        if mimo_key and not os.environ.get("OPENAI_API_KEY"):
+            os.environ["OPENAI_API_KEY"] = mimo_key
+
     model = llm.get_model(model_name)
 
     if "gemini" in model_name.lower():
         api_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
-        if api_key:
-            model.key = api_key
-    if "mimo" in model_name.lower():
-        api_key = os.environ.get("MIMO_API_KEY")
         if api_key:
             model.key = api_key
     if base_url:

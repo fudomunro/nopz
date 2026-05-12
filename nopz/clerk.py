@@ -57,6 +57,12 @@ class Clerk:
         if self.base_url:
             _register_extra_model(self.model_name)
 
+        # Inject API keys before get_model — OpenAI plugin checks env var immediately
+        if "mimo" in self.model_name.lower():
+            mimo_key = os.environ.get("MIMO_API_KEY")
+            if mimo_key and not os.environ.get("OPENAI_API_KEY"):
+                os.environ["OPENAI_API_KEY"] = mimo_key
+
         try:
             model = llm.get_model(self.model_name)
         except llm.UnknownModelError:
@@ -64,13 +70,9 @@ class Clerk:
             logger.error(error_msg)
             return error_msg, {}
 
-        # Inject API keys
+        # Inject API keys for non-OpenAI models
         if "gemini" in self.model_name.lower():
             api_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
-            if api_key:
-                model.key = api_key
-        if "mimo" in self.model_name.lower():
-            api_key = os.environ.get("MIMO_API_KEY")
             if api_key:
                 model.key = api_key
         if self.base_url:
