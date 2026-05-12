@@ -7,19 +7,19 @@
 ## How it Works
 
 1. **Define Conditions:** You provide a file containing a list of conditions or rules.
-2. **Agent Evaluation:** NOPZ feeds these conditions to an AI agent (defaulting to Gemini) along with the current state or context.
+2. **Agent Evaluation:** NOPZ feeds these conditions to an AI agent (powered by the `llm` library, defaulting to Gemini) along with the current state or context.
 3. **Action & Loop:** The agent attempts to satisfy the conditions. NOPZ then re-evaluates the state.
 4. **Termination:** The tool only exits successfully when a run of the agent requires zero actions to ensure all conditions are met.
 
 ## Current Status
 
 - **Language:** Python
-- **Default Agent:** Google Gemini (with plans to support others)
+- **Models:** Supports any model available via Simon Willison's `llm` library plugins (defaults to `gemini-2.5-pro`)
 - **Interface:** CLI
 
 ## Setup
 
-NOPZ currently defaults to using Google Gemini. You must set your API key as an environment variable before running the tool:
+NOPZ uses the `llm` library and defaults to `gemini-2.5-pro`. You must set your API key as an environment variable before running the tool:
 
     $ export GOOGLE_API_KEY="your_api_key_here"
 
@@ -30,5 +30,5 @@ NOPZ currently defaults to using Google Gemini. You must set your API key as an 
 ## Roadmap
 
 - Basic CLI scaffold to read a conditions file.
-- Gemini API integration and iterative agent loop.
-- Abstraction layer for supporting other LLM agents.
+- Iterative agent loop.
+- Support for multiple LLMs via the `llm` library ecosystem.

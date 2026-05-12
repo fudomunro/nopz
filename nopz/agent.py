@@ -1,20 +1,33 @@
 import logging
 import os
+import signal
 import subprocess
 from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import List, Tuple
 
-from google import genai
-from google.genai import types
+import llm
+import yaml
 
 logger = logging.getLogger(__name__)
+
+
+class RunFinishedException(BaseException):
+    """Exception raised when the agent calls the finish_run tool to signal completion.
+    Inherits from BaseException to bypass llm's internal Exception catch block."""
+
+    def __init__(self, actions_taken: bool, summary: str, usage: dict | None = None):
+        self.actions_taken = actions_taken
+        self.summary = summary
+        self.usage = usage or {}
+        super().__init__(summary)
 
 
 class Agent(ABC):
     """Base class for all NOPZ agents."""
 
     @abstractmethod
-    def enforce_conditions(self, conditions: List[str]) -> Tuple[bool, str]:
+    def enforce_conditions(self, conditions: List[str]) -> Tuple[bool, str, dict]:
         """
         Evaluate the conditions and take action if they are not met.
 
@@ -27,12 +40,13 @@ class Agent(ABC):
             conditions: A list of conditions to evaluate.
 
         Returns:
-            Tuple[bool, str]: A tuple containing:
+            Tuple[bool, str, dict]: A tuple containing:
                 - bool: True if the agent performed any actions to satisfy the conditions.
                         False if the agent determined all conditions were already met
                         and no actions were required. External verification is not used;
                         we trust the agent's report.
                 - str: A summary of the work completed during this run, or why no work was needed.
+                - dict: Token usage information for this run.
         """
         pass
 
@@ -42,6 +56,7 @@ class Agent(ABC):
 
 def read_file(path: str, offset: int = 0, limit: int = 4000) -> str:
     """Reads the content of a file in chunks. Use offset and limit to read large files."""
+    logger.debug(f"Tool called: read_file(path={path}, offset={offset}, limit={limit})")
     try:
         with open(path, "r", encoding="utf-8") as f:
             f.seek(offset)
@@ -56,6 +71,7 @@ def read_file(path: str, offset: int = 0, limit: int = 4000) -> str:
 
 def write_file(path: str, content: str) -> str:
     """Writes content to a file. Creates the directory if it doesn't exist."""
+    logger.debug(f"Tool called: write_file(path={path})")
     try:
         os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
         with open(path, "w", encoding="utf-8") as f:
@@ -67,6 +83,7 @@ def write_file(path: str, content: str) -> str:
 
 def list_directory(path: str) -> str:
     """Lists the contents of a directory."""
+    logger.debug(f"Tool called: list_directory(path={path})")
     try:
         items = os.listdir(path)
         return "\n".join(items) if items else "Directory is empty."
@@ -76,8 +93,9 @@ def list_directory(path: str) -> str:
 
 def execute_shell_command(command: str, timeout: int = 120) -> str:
     """Executes a shell command and returns its stdout and stderr. Large outputs are written to files."""
-    import signal
-
+    logger.debug(
+        f"Tool called: execute_shell_command(command={command}, timeout={timeout})"
+    )
     try:
         with subprocess.Popen(
             command,
@@ -119,35 +137,102 @@ def finish_run(actions_taken: bool, summary: str) -> str:
     """
     Call this tool when you have finished evaluating and (if necessary) enforcing the conditions.
 
-    Args:
-        actions_taken: True if you had to perform ANY actions (e.g. creating files, modifying files, running shell commands) to satisfy the conditions. False if ALL conditions were already met and you only inspected the state.
-        summary: A concise summary of the actions you took, or an explanation of why no actions were required.
+    :param actions_taken: True if you had to perform ANY actions (e.g. creating files, modifying files, running shell commands) to satisfy the conditions. False if ALL conditions were already met and you only inspected the state.
+    :param summary: A concise summary of the actions you took, or an explanation of why no actions were required.
     """
-    return "Run finished."
+    logger.debug(
+        f"Tool called: finish_run(actions_taken={actions_taken}, summary={summary})"
+    )
+    if isinstance(actions_taken, str):
+        actions_taken = actions_taken.lower() == "true"
+    else:
+        actions_taken = bool(actions_taken)
+    raise RunFinishedException(actions_taken, str(summary))
 
 
-class GeminiAgent(Agent):
-    """An agent powered by Google's Gemini."""
+def _register_extra_model(model_id: str) -> None:
+    """Register a custom OpenAI-compatible model in the llm library's extra models config.
 
-    def __init__(self, model: str = "gemini-2.5-pro"):
+    Note: api_base is NOT set here because the llm plugin treats it as "no key needed"
+    and uses a dummy key. Instead, api_base is set on the model object directly.
+    """
+    config_path = Path(llm.user_dir()) / "extra-openai-models.yaml"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+
+    existing = []
+    if config_path.exists():
+        with open(config_path, "r") as f:
+            existing = yaml.safe_load(f) or []
+
+    # Update or add the model entry (without api_base)
+    updated = False
+    for entry in existing:
+        if entry.get("model_id") == model_id:
+            entry["supports_tools"] = True
+            updated = True
+            break
+
+    if not updated:
+        existing.append({
+            "model_id": model_id,
+            "model_name": model_id,
+            "supports_tools": True,
+        })
+
+    with open(config_path, "w") as f:
+        yaml.dump(existing, f, default_flow_style=False)
+
+    logger.debug(f"Registered model '{model_id}' in {config_path}")
+
+
+class LLMAgent(Agent):
+    """An agent powered by the llm library (supports Gemini, OpenAI, Claude, MiMo, etc)."""
+
+    def __init__(self, model: str = "gemini-2.5-pro", base_url: str | None = None):
         self.model_name = model
+        self.base_url = base_url
 
-        # Determine the API key
-        api_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
-        if not api_key:
-            logger.warning(
-                "Neither GOOGLE_API_KEY nor GEMINI_API_KEY environment variable is set. API calls may fail."
-            )
-
-        self.client = genai.Client(api_key=api_key, http_options={"timeout": 600000})
-
-    def enforce_conditions(self, conditions: List[str]) -> Tuple[bool, str]:
+    def enforce_conditions(self, conditions: List[str]) -> Tuple[bool, str, dict]:
         """
-        Evaluate conditions using Gemini and take necessary actions independently.
+        Evaluate conditions using the specified model and take necessary actions independently.
         """
         logger.info(
-            f"GeminiAgent is independently evaluating {len(conditions)} condition(s)..."
+            f"LLMAgent ({self.model_name}) is independently evaluating {len(conditions)} condition(s)..."
         )
+
+        # Auto-register custom OpenAI-compatible models when base_url is provided
+        if self.base_url:
+            _register_extra_model(self.model_name)
+
+        try:
+            model = llm.get_model(self.model_name)
+        except llm.UnknownModelError:
+            error_msg = f"Model '{self.model_name}' not found. Make sure the appropriate llm plugin is installed."
+            logger.error(error_msg)
+            return True, error_msg, {}
+
+        # If it's a Gemini model, we can inject the key from standard Google env vars.
+        # Otherwise, we rely on the llm library's native key management for that model.
+        if "gemini" in self.model_name.lower():
+            api_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get(
+                "GEMINI_API_KEY"
+            )
+            if api_key:
+                model.key = api_key
+            else:
+                logger.warning(
+                    "Neither GOOGLE_API_KEY nor GEMINI_API_KEY environment variable is set. API calls may fail depending on the model."
+                )
+
+        # MiMo key injection (for servers that require auth)
+        if "mimo" in self.model_name.lower():
+            api_key = os.environ.get("MIMO_API_KEY")
+            if api_key:
+                model.key = api_key
+
+        # Override base URL if provided (for MiMo or other OpenAI-compatible servers)
+        if self.base_url:
+            model.api_base = self.base_url
 
         tools = [
             read_file,
@@ -168,122 +253,57 @@ class GeminiAgent(Agent):
             "- Set `summary` to a concise description of what you did or why no actions were needed."
         )
 
-        config = types.GenerateContentConfig(
-            tools=tools,
-            system_instruction=system_instruction,
-            temperature=0.0,
-            automatic_function_calling=types.AutomaticFunctionCallingConfig(
-                disable=True
-            ),
-        )
-
-        # 1. Start a fresh, independent chat session (no prior context).
-        logger.debug(f"Starting chat session with model {self.model_name}")
-        chat = self.client.chats.create(
-            model=self.model_name,
-            config=config,
-        )
-
-        # 2. Provide ONLY the conditions to the model.
         prompt = "Here are the conditions you need to enforce:\n\n"
         for i, c in enumerate(conditions, 1):
             prompt += f"{i}. {c}\n"
         prompt += "\nPlease inspect the environment, make any necessary changes, and then call finish_run."
 
-        logger.debug("Sending initial prompt to the model...")
-        response = chat.send_message(prompt)
+        logger.debug(f"Starting chat session with model {self.model_name}")
+        conversation = model.conversation()
 
-        # Execution loop for tools
-        max_turns = 100
-        for turn_num in range(1, max_turns + 1):
-            logger.debug(f"--- Turn {turn_num} ---")
+        def get_usage(chain_response):
+            input_tokens = 0
+            output_tokens = 0
+            # ChainResponse stores individual Response objects in _responses
+            for r in getattr(chain_response, "_responses", []):
+                input_tokens += getattr(r, "input_tokens", 0) or 0
+                output_tokens += getattr(r, "output_tokens", 0) or 0
+            return {"input": input_tokens, "output": output_tokens}
 
-            if response.text:
-                logger.debug(f"Model response text:\n{response.text}")
-
-            if not response.function_calls:
-                logger.debug(
-                    "No function calls in response. Prompting model to use finish_run."
-                )
-                # If the model didn't call any tools (including finish_run), prompt it to do so.
-                response = chat.send_message(
-                    "Please use the finish_run tool to report your status and conclude the run."
-                )
-                continue
-
-            tool_responses = []
-            finished = False
-            actions_taken_result = (
-                True  # Default to True in case of early exit/parsing failure
+        try:
+            logger.debug("Sending initial prompt to the model...")
+            # The chain function handles looping back tool responses automatically.
+            response = conversation.chain(
+                prompt,
+                system=system_instruction,
+                tools=tools,
+                chain_limit=100,
             )
-            summary_result = "No summary provided."
 
-            for fc in response.function_calls:
-                tool_args = fc.args or {}
+            try:
+                # Drive the generator to trigger tool execution
+                for _ in response:
+                    pass
+            except RunFinishedException as e:
+                # Inject usage into the exception so it can be returned
+                e.usage = get_usage(response)
+                raise e
 
-                logger.debug(f"Model called tool: {fc.name} with args: {tool_args}")
+            logger.warning(
+                "LLMAgent exceeded maximum turns without calling finish_run."
+            )
+            # We assume actions were taken to force another run iteration and prevent premature convergence.
+            return (
+                True,
+                "Exceeded maximum turns without calling finish_run.",
+                get_usage(response),
+            )
 
-                if fc.name == "finish_run":
-                    # The model has signaled it is done. Extract the self-reported boolean.
-                    val = tool_args.get("actions_taken", True)
-                    if isinstance(val, str):
-                        actions_taken_result = val.lower() == "true"
-                    else:
-                        actions_taken_result = bool(val)
-                    summary_result = str(
-                        tool_args.get("summary", "No summary provided.")
-                    )
-                    finished = True
-                    break
-
-                # Execute other tools
-                tool_name = fc.name
-
-                func_map = {
-                    "read_file": read_file,
-                    "write_file": write_file,
-                    "list_directory": list_directory,
-                    "execute_shell_command": execute_shell_command,
-                }
-
-                if tool_name in func_map:
-                    try:
-                        result = func_map[tool_name](**tool_args)
-                        logger.debug(f"Tool {tool_name} returned successfully.")
-                        tool_responses.append(
-                            types.Part.from_function_response(
-                                name=tool_name, response={"result": str(result)}
-                            )
-                        )
-                    except Exception as e:
-                        logger.debug(f"Tool {tool_name} raised exception: {e}")
-                        tool_responses.append(
-                            types.Part.from_function_response(
-                                name=tool_name, response={"error": str(e)}
-                            )
-                        )
-                else:
-                    logger.debug(f"Unknown tool called: {tool_name}")
-                    tool_responses.append(
-                        types.Part.from_function_response(
-                            name=tool_name,
-                            response={"error": f"Unknown tool: {tool_name}"},
-                        )
-                    )
-
-            if finished:
-                logger.debug(
-                    f"Model signaled finish_run. Actions taken: {actions_taken_result}, Summary: {summary_result}"
-                )
-                return actions_taken_result, summary_result
-
-            # Send tool execution results back to the model to continue the loop
-            if tool_responses:
-                logger.debug(
-                    f"Sending {len(tool_responses)} tool response(s) back to the model."
-                )
-                response = chat.send_message(tool_responses)
-
-        logger.warning("GeminiAgent exceeded maximum turns without calling finish_run.")
-        # We assume actions were taken to force another run iteration and prevent premature convergence.
-        return True, "Exceeded maximum turns without calling finish_run."
+        except RunFinishedException as e:
+            logger.debug(
+                f"Model signaled finish_run. Actions taken: {e.actions_taken}, Summary: {e.summary}, Usage: {e.usage}"
+            )
+            return e.actions_taken, e.summary, e.usage
+        except Exception as e:
+            logger.error(f"Error during agent execution: {e}")
+            return True, f"Error: {e}", {}
