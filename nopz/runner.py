@@ -1,121 +1,141 @@
+"""Runner — orchestrates the clerk/beaurocrat workflow.
+
+The runner manages git branches and coordinates the cycle:
+  1. Create a branch
+  2. Clerk makes changes
+  3. Beaurocrat validates
+  4. Merge on pass, retry on failure
+"""
+
 import logging
-from typing import List, Protocol, Tuple
+import subprocess
+from typing import Optional
+
+from nopz.beaurocrat import Beaurocrat
+from nopz.clerk import Clerk
+from nopz.regulations import Regulation, RegulationResult
 
 logger = logging.getLogger(__name__)
 
 
-class Agent(Protocol):
-    """Protocol defining the interface for a NOPZ agent."""
-
-    def evaluate_and_act(self, conditions: List[str]) -> Tuple[bool, str, dict]:
-        """
-        Independently evaluate the given conditions and take actions if any conditions
-        are not met. The agent determines entirely on its own if work was required.
-
-        Args:
-            conditions: A list of strings representing the desired state or rules.
-
-        Returns:
-            Tuple[bool, str, dict]: A tuple containing:
-                - bool: True if the agent had to take an action to satisfy the conditions.
-                - str: A summary of the work completed.
-                - dict: Token usage information for this run.
-        """
-        ...
+def _git(*args: str) -> str:
+    """Run a git command and return stdout."""
+    result = subprocess.run(
+        ["git"] + list(args),
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        logger.error(f"git {' '.join(args)} failed: {result.stderr}")
+    return result.stdout.strip()
 
 
 class Runner:
-    """
-    The core NOPZ runner that repeatedly executes an agent until all conditions
-    are satisfied without requiring further action.
-    """
+    """Orchestrates the clerk/beaurocrat loop with git branch management."""
 
     def __init__(
         self,
-        agent: Agent,
-        conditions: List[str],
+        clerk: Clerk,
+        beaurocrat: Beaurocrat,
+        regulations: list[Regulation],
         max_iterations: int = 10,
+        branch_prefix: str = "nopz/",
     ):
-        """
-        Initialize the Runner.
-
-        Args:
-            agent: The agent instance to use (e.g., Gemini-based agent).
-            conditions: A list of conditions to enforce.
-            max_iterations: The maximum number of times to prompt the agent before giving up.
-        """
-        import logging
-
-        self.logger = logging.getLogger(__name__)
-        self.logger.debug(
-            "Runner initialized with %d conditions and max_iterations=%d",
-            len(conditions),
-            max_iterations,
-        )
-        self.agent = agent
-        self.conditions = conditions
+        self.clerk = clerk
+        self.beaurocrat = beaurocrat
+        self.regulations = regulations
         self.max_iterations = max_iterations
+        self.branch_prefix = branch_prefix
 
     def run(self) -> bool:
-        """
-        Runs the agent loop.
+        """Run the clerk/beaurocrat loop.
 
         Returns:
-            bool: True if the run completed successfully (no actions needed),
-                  False if the maximum number of iterations was reached.
+            True if all regulations passed, False if max iterations reached.
         """
-        if not self.conditions:
-            logger.warning("No conditions provided. Nothing to do.")
+        if not self.regulations:
+            logger.warning("No regulations provided. Nothing to do.")
             return True
 
-        logger.info(f"Starting NOPZ run with {len(self.conditions)} conditions.")
+        logger.info(f"Starting NOPZ run with {len(self.regulations)} regulations.")
 
-        timeline = []
+        # Ensure we're in a git repo
+        _git("rev-parse", "--is-inside-work-tree")
+
+        # Get the current branch to return to later
+        original_branch = _git("branch", "--show-current")
+        if not original_branch:
+            original_branch = "main"
+
+        timeline: list[str] = []
         total_usage = {"input": 0, "output": 0}
+        failure_context: Optional[list[RegulationResult]] = None
 
         for iteration in range(1, self.max_iterations + 1):
             logger.info(f"--- Iteration {iteration}/{self.max_iterations} ---")
 
+            branch_name = f"{self.branch_prefix}{iteration}"
+
+            # Create and checkout the branch
+            _git("checkout", "-b", branch_name, original_branch)
+
             try:
-                action_taken, summary, usage = self.agent.evaluate_and_act(
-                    self.conditions
-                )
-                timeline.append(f"Iteration {iteration}: {summary}")
+                # Clerk makes changes
+                summary, usage = self.clerk.work(self.regulations, failure_context)
+                timeline.append(f"Iteration {iteration} (clerk): {summary}")
                 total_usage["input"] += usage.get("input", 0)
                 total_usage["output"] += usage.get("output", 0)
+
+                # Commit the clerk's changes
+                _git("add", "-A")
+                _git("commit", "-m", f"NOPZ iteration {iteration}: {summary}")
+
+                # Beaurocrat validates
+                logger.info("Beaurocrat validating regulations...")
+                results = self.beaurocrat.validate_all()
+
+                for r in results:
+                    status = "PASS" if r.passed else "FAIL"
+                    logger.info(f"  {r.name}: {status} — {r.message}")
+
+                if self.beaurocrat.all_passed(results):
+                    # Merge into original branch
+                    logger.info("All regulations passed. Merging.")
+                    _git("checkout", original_branch)
+                    _git("merge", "--no-ff", "-m", f"NOPZ: all regulations satisfied", branch_name)
+
+                    logger.info("--- Timeline of Activity ---")
+                    for entry in timeline:
+                        logger.info(entry)
+                    logger.info(
+                        f"Total Token Usage: Input: {total_usage['input']}, Output: {total_usage['output']}"
+                    )
+                    logger.info("You are technically correct. The BEST kind of correct.")
+                    return True
+
+                # Validation failed — record failures for next iteration
+                failure_context = self.beaurocrat.failures(results)
+                failed_names = [f.name for f in failure_context]
+                timeline.append(
+                    f"Iteration {iteration} (beaurocrat): FAILED — {', '.join(failed_names)}"
+                )
+                logger.info(f"Validation failed: {', '.join(failed_names)}")
+
             except Exception as e:
-                logger.error(f"Agent encountered an error: {e}")
-                # We can decide whether to abort or retry here. For now, abort.
-                raise
+                logger.error(f"Error during iteration {iteration}: {e}")
+                timeline.append(f"Iteration {iteration}: ERROR — {e}")
 
-            if not action_taken:
-                logger.info("No action required by the agent. All conditions are met!")
-
-                logger.info("--- Timeline of Activity ---")
-                for entry in timeline:
-                    logger.info(entry)
-
-                logger.info(
-                    f"Total Token Usage: Input: {total_usage['input']}, Output: {total_usage['output']}"
-                )
-
-                logger.info("You are technically correct. The BEST kind of correct.")
-                return True
-
-            if iteration < self.max_iterations:
-                logger.debug(
-                    "Action was taken. Re-evaluating with a completely independent run..."
-                )
+            finally:
+                # Return to original branch for the next iteration
+                _git("checkout", original_branch)
 
         logger.warning(
-            f"Reached maximum iterations ({self.max_iterations}) without reaching a stable state."
+            f"Reached maximum iterations ({self.max_iterations}) without all regulations passing."
         )
         logger.info("--- Timeline of Activity ---")
         for entry in timeline:
             logger.info(entry)
-
         logger.info(
             f"Total Token Usage: Input: {total_usage['input']}, Output: {total_usage['output']}"
         )
-
         return False

@@ -289,11 +289,9 @@ name = "nopz"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "click" },
     { name = "llm" },
     { name = "llm-gemini" },
     { name = "openai" },
-    { name = "pyyaml" },
 ]
 
 [package.optional-dependencies]
@@ -303,12 +301,10 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "click" },
     { name = "llm", specifier = ">=0.29" },
     { name = "llm-gemini", specifier = ">=0.29" },
     { name = "openai" },
     { name = "pytest", marker = "extra == 'dev'" },
-    { name = "pyyaml" },
 ]
 provides-extras = ["dev"]
 
