@@ -70,9 +70,13 @@ class Clerk:
             logger.error(error_msg)
             return error_msg, {}
 
-        # Inject API keys for non-OpenAI models
+        # Inject API keys
         if "gemini" in self.model_name.lower():
             api_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
+            if api_key:
+                model.key = api_key
+        if "mimo" in self.model_name.lower():
+            api_key = os.environ.get("MIMO_API_KEY")
             if api_key:
                 model.key = api_key
         if self.base_url:
