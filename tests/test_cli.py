@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 from unittest.mock import patch
 
@@ -86,22 +85,15 @@ def test_main_with_multiple_files(tmp_path: Path):
         'def reg_b():\n'
         '    return RegulationResult(passed=True, name="reg_b")\n'
     )
-    output_dir = tmp_path / "output_dir"
 
-    original_cwd = os.getcwd()
+    with (
+        patch("sys.argv", ["nopz", str(file_a), str(file_b)]),
+        patch("nopz.runner.Runner.run", return_value=True),
+    ):
+        with pytest.raises(SystemExit) as excinfo:
+            main()
 
-    try:
-        with (
-            patch("sys.argv", ["nopz", str(file_a), str(file_b), "--output", str(output_dir)]),
-            patch("nopz.runner.Runner.run", return_value=True),
-        ):
-            with pytest.raises(SystemExit) as excinfo:
-                main()
-
-            assert excinfo.value.code == 0
-            assert output_dir.exists()
-    finally:
-        os.chdir(original_cwd)
+        assert excinfo.value.code == 0
 
 
 def test_main_with_output(tmp_path: Path):
@@ -114,18 +106,11 @@ def test_main_with_output(tmp_path: Path):
     )
     output_dir = tmp_path / "output_dir"
 
-    original_cwd = os.getcwd()
+    with (
+        patch("sys.argv", ["nopz", str(test_file), "--output", str(output_dir)]),
+        patch("nopz.runner.Runner.run", return_value=True),
+    ):
+        with pytest.raises(SystemExit) as excinfo:
+            main()
 
-    try:
-        with (
-            patch("sys.argv", ["nopz", str(test_file), "--output", str(output_dir)]),
-            patch("nopz.runner.Runner.run", return_value=True),
-        ):
-            with pytest.raises(SystemExit) as excinfo:
-                main()
-
-            assert excinfo.value.code == 0
-            assert output_dir.exists()
-            assert os.getcwd() == str(output_dir)
-    finally:
-        os.chdir(original_cwd)
+        assert excinfo.value.code == 0

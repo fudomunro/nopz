@@ -76,8 +76,8 @@ class Runner:
 
             branch_name = f"{self.branch_prefix}{iteration}"
 
-            # Create and checkout the branch
-            _git("checkout", "-b", branch_name, original_branch)
+            # Create and checkout the branch (-B force-creates if it already exists)
+            _git("checkout", "-B", branch_name, original_branch)
 
             try:
                 # Clerk makes changes
@@ -85,6 +85,11 @@ class Runner:
                 timeline.append(f"Iteration {iteration} (clerk): {summary}")
                 total_usage["input"] += usage.get("input", 0)
                 total_usage["output"] += usage.get("output", 0)
+
+                # If clerk failed to do any work, skip this iteration
+                if summary.startswith("Clerk error:"):
+                    logger.warning(f"Clerk failed: {summary}. Skipping validation.")
+                    continue
 
                 # Commit the clerk's changes
                 _git("add", "-A")

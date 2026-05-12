@@ -144,12 +144,6 @@ def main():
 
     logging.info(f"Loaded {len(regulations)} regulation(s): {[r.name for r in regulations]}")
 
-    # Change to output directory if specified
-    if args.output:
-        output_dir = Path(args.output)
-        output_dir.mkdir(parents=True, exist_ok=True)
-        os.chdir(output_dir)
-
     # Build components
     clerk = Clerk(
         model=args.clerk_model,
