@@ -89,13 +89,9 @@ class Runner:
                 # If clerk failed to do any work, skip this iteration
                 if summary.startswith("Clerk error:"):
                     logger.warning(f"Clerk failed: {summary}. Skipping validation.")
-                    # Abort if same error repeated (e.g., missing API key)
-                    if len(timeline) >= 2 and all(
-                        "Clerk error:" in t for t in timeline[-2:]
-                    ):
-                        logger.error("Clerk failed repeatedly. Aborting.")
-                        break
-                    continue
+                    # Abort immediately — clerk errors won't fix themselves
+                    logger.error("Clerk error is not recoverable. Aborting.")
+                    break
 
                 # Commit the clerk's changes
                 _git("add", "-A")
