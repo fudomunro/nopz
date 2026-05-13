@@ -109,6 +109,11 @@ def main():
         default=None,
         help="Path to logfile. Defaults to {output}/nopz.log when --output is set.",
     )
+    parser.add_argument(
+        "--no-git",
+        action="store_true",
+        help="Disable git branch management. Files are created directly in the output directory.",
+    )
 
     args = parser.parse_args()
 
@@ -148,6 +153,10 @@ def main():
 
     logging.info(f"Loaded {len(regulations)} regulation(s): {[r.name for r in regulations]}")
 
+    # Chdir to output directory so clerk/beaurocrat work there directly
+    if args.output:
+        os.chdir(args.output)
+
     # Build components
     clerk = Clerk(
         model=args.clerk_model,
@@ -164,6 +173,7 @@ def main():
         beaurocrat=beaurocrat,
         regulations=regulations,
         max_iterations=args.max_iterations,
+        use_git=not args.no_git,
     )
 
     try:

@@ -1,10 +1,9 @@
 """Runner — orchestrates the clerk/beaurocrat workflow.
 
-The runner manages git branches and coordinates the cycle:
-  1. Create a branch
-  2. Clerk makes changes
-  3. Beaurocrat validates
-  4. Merge on pass, retry on failure
+The runner coordinates the cycle:
+  1. Clerk makes changes
+  2. Beaurocrat validates
+  3. Merge on pass (git mode), retry on failure
 """
 
 import logging
@@ -31,7 +30,7 @@ def _git(*args: str) -> str:
 
 
 class Runner:
-    """Orchestrates the clerk/beaurocrat loop with git branch management."""
+    """Orchestrates the clerk/beaurocrat loop."""
 
     def __init__(
         self,
@@ -40,12 +39,14 @@ class Runner:
         regulations: list[Regulation],
         max_iterations: int = 10,
         branch_prefix: str = "nopz/",
+        use_git: bool = True,
     ):
         self.clerk = clerk
         self.beaurocrat = beaurocrat
         self.regulations = regulations
         self.max_iterations = max_iterations
         self.branch_prefix = branch_prefix
+        self.use_git = use_git
 
     def run(self) -> bool:
         """Run the clerk/beaurocrat loop.
@@ -59,13 +60,12 @@ class Runner:
 
         logger.info(f"Starting NOPZ run with {len(self.regulations)} regulations.")
 
-        # Ensure we're in a git repo
-        _git("rev-parse", "--is-inside-work-tree")
-
-        # Get the current branch to return to later
-        original_branch = _git("branch", "--show-current")
-        if not original_branch:
-            original_branch = "main"
+        original_branch = None
+        if self.use_git:
+            _git("rev-parse", "--is-inside-work-tree")
+            original_branch = _git("branch", "--show-current")
+            if not original_branch:
+                original_branch = "main"
 
         timeline: list[str] = []
         total_usage = {"input": 0, "output": 0}
@@ -74,10 +74,9 @@ class Runner:
         for iteration in range(1, self.max_iterations + 1):
             logger.info(f"--- Iteration {iteration}/{self.max_iterations} ---")
 
-            branch_name = f"{self.branch_prefix}{iteration}"
-
-            # Create and checkout the branch (-B force-creates if it already exists)
-            _git("checkout", "-B", branch_name, original_branch)
+            if self.use_git:
+                branch_name = f"{self.branch_prefix}{iteration}"
+                _git("checkout", "-B", branch_name, original_branch)
 
             try:
                 # Clerk makes changes
@@ -89,20 +88,20 @@ class Runner:
                 # If clerk failed to do any work, skip this iteration
                 if summary.startswith("Clerk error:"):
                     logger.warning(f"Clerk failed: {summary}. Skipping validation.")
-                    # Abort immediately — clerk errors won't fix themselves
                     logger.error("Clerk error is not recoverable. Aborting.")
                     break
 
-                # Commit the clerk's changes (skip if nothing to commit)
-                _git("add", "-A")
-                result = subprocess.run(
-                    ["git", "diff", "--cached", "--quiet"],
-                    capture_output=True,
-                )
-                if result.returncode != 0:
-                    _git("commit", "-m", f"NOPZ iteration {iteration}: {summary}")
-                else:
-                    logger.info("No changes to commit.")
+                # Commit the clerk's changes (git mode only)
+                if self.use_git:
+                    _git("add", "-A")
+                    result = subprocess.run(
+                        ["git", "diff", "--cached", "--quiet"],
+                        capture_output=True,
+                    )
+                    if result.returncode != 0:
+                        _git("commit", "-m", f"NOPZ iteration {iteration}: {summary}")
+                    else:
+                        logger.info("No changes to commit.")
 
                 # Beaurocrat validates
                 logger.info("Beaurocrat validating regulations...")
@@ -113,10 +112,12 @@ class Runner:
                     logger.info(f"  {r.name}: {status} — {r.message}")
 
                 if self.beaurocrat.all_passed(results):
-                    # Merge into original branch
-                    logger.info("All regulations passed. Merging.")
-                    _git("checkout", original_branch)
-                    _git("merge", "--no-ff", "-m", f"NOPZ: all regulations satisfied", branch_name)
+                    if self.use_git:
+                        logger.info("All regulations passed. Merging.")
+                        _git("checkout", original_branch)
+                        _git("merge", "--no-ff", "-m", "NOPZ: all regulations satisfied", branch_name)
+                    else:
+                        logger.info("All regulations passed.")
 
                     logger.info("--- Timeline of Activity ---")
                     for entry in timeline:
@@ -140,8 +141,8 @@ class Runner:
                 timeline.append(f"Iteration {iteration}: ERROR — {e}")
 
             finally:
-                # Return to original branch for the next iteration
-                _git("checkout", original_branch)
+                if self.use_git:
+                    _git("checkout", original_branch)
 
         logger.warning(
             f"Reached maximum iterations ({self.max_iterations}) without all regulations passing."
