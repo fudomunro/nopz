@@ -85,8 +85,11 @@ class Runner:
                 total_usage["input"] += usage.get("input", 0)
                 total_usage["output"] += usage.get("output", 0)
 
-                # If clerk failed to do any work, skip this iteration
-                if summary.startswith("Clerk error:"):
+                # Chain limit errors are recoverable — the clerk made progress,
+                # so validate what exists and continue iterating.
+                if summary.startswith("Clerk error:") and "Chain limit" in summary:
+                    logger.warning(f"Clerk hit turn limit: {summary}. Validating progress.")
+                elif summary.startswith("Clerk error:"):
                     logger.warning(f"Clerk failed: {summary}. Skipping validation.")
                     logger.error("Clerk error is not recoverable. Aborting.")
                     break
