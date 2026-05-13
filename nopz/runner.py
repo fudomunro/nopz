@@ -93,9 +93,16 @@ class Runner:
                     logger.error("Clerk error is not recoverable. Aborting.")
                     break
 
-                # Commit the clerk's changes
+                # Commit the clerk's changes (skip if nothing to commit)
                 _git("add", "-A")
-                _git("commit", "-m", f"NOPZ iteration {iteration}: {summary}")
+                result = subprocess.run(
+                    ["git", "diff", "--cached", "--quiet"],
+                    capture_output=True,
+                )
+                if result.returncode != 0:
+                    _git("commit", "-m", f"NOPZ iteration {iteration}: {summary}")
+                else:
+                    logger.info("No changes to commit.")
 
                 # Beaurocrat validates
                 logger.info("Beaurocrat validating regulations...")

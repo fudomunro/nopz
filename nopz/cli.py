@@ -12,6 +12,7 @@ from pathlib import Path
 
 from nopz.beaurocrat import Beaurocrat
 from nopz.clerk import Clerk
+from nopz.llm_compat import patch_reasoning_content
 from nopz.regulations import Regulation, get_regulations
 from nopz.runner import Runner
 
@@ -110,6 +111,9 @@ def main():
     )
 
     args = parser.parse_args()
+
+    # Patch llm library for reasoning_content support (MiMo, etc.)
+    patch_reasoning_content()
 
     if args.debug:
         logging.getLogger().setLevel(logging.DEBUG)
