@@ -1,88 +1,91 @@
+"""NOPZ CLI — entry point for the NOPZ tool.
+
+Loads regulations from a Python file and runs the clerk/beaurocrat loop.
+"""
+
 import argparse
+import importlib.util
 import logging
 import os
 import sys
 from pathlib import Path
 
-import yaml
-
-from nopz.agent import LLMAgent
+from nopz.beaurocrat import Beaurocrat
+from nopz.clerk import Clerk
+from nopz.llm_compat import patch_reasoning_content
+from nopz.regulations import Regulation, get_regulations
 from nopz.runner import Runner
 
-# Setup basic logging
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
 
-class AgentAdapter:
-    """Adapts the Agent interface to the Runner's expected Protocol."""
+def load_regulations(file_path: str) -> list[Regulation]:
+    """Load regulations from a Python file.
 
-    def __init__(self, agent):
-        self.agent = agent
-
-    def evaluate_and_act(self, conditions: list[str]) -> tuple[bool, str, dict]:
-        # Map to the method defined in agent.py
-        return self.agent.enforce_conditions(conditions)
-
-
-def load_conditions(file_path: str) -> list[str]:
-    """Loads conditions from a YAML or plain text file."""
+    The file should use the @regulation decorator from nopz.regulations.
+    After importing, the decorated functions are collected from the global registry.
+    """
     path = Path(file_path)
     if not path.exists():
-        logging.error(f"Conditions file not found: {file_path}")
+        logging.error(f"Regulations file not found: {file_path}")
         sys.exit(1)
 
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            if path.suffix in [".yaml", ".yml"]:
-                data = yaml.safe_load(f)
-                if isinstance(data, dict) and "conditions" in data:
-                    return data["conditions"]
-                elif isinstance(data, list):
-                    return [str(item) for item in data]
-                else:
-                    logging.error(
-                        "Invalid YAML format: expected a list or a dict with a 'conditions' key."
-                    )
-                    sys.exit(1)
-            else:
-                # Treat as plain text, one condition per line
-                return [line.strip() for line in f if line.strip()]
-    except Exception as e:
-        logging.error(f"Failed to load conditions: {e}")
+    # Import the module dynamically
+    spec = importlib.util.spec_from_file_location("regulations_module", path)
+    if spec is None or spec.loader is None:
+        logging.error(f"Could not load module: {file_path}")
         sys.exit(1)
+
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["regulations_module"] = module
+    spec.loader.exec_module(module)
+
+    # Collect registered regulations
+    regulations = get_regulations()
+    if not regulations:
+        logging.warning(f"No @regulation decorators found in {file_path}")
+
+    return regulations
 
 
 def main():
     parser = argparse.ArgumentParser(
         prog="nopz",
-        description="Number One Point Zero (NOPZ) - Enforce conditions via AI agents.",
+        description="Number One Point Zero (NOPZ) — enforce regulations via AI agents.",
     )
     parser.add_argument(
-        "conditions_files",
-        nargs="*",
-        help="Path(s) to the file(s) containing the conditions to enforce.",
+        "regulations_files",
+        nargs="+",
+        help="Path(s) to Python file(s) defining regulations with @regulation.",
     )
     parser.add_argument(
-        "--list-models",
-        action="store_true",
-        help="List available models and exit.",
-    )
-    parser.add_argument(
-        "--model",
+        "--clerk-model",
         type=str,
         default="gemini-2.5-pro",
-        help="Specify the model to use (default: gemini-2.5-pro).",
+        help="Model for the clerk (default: gemini-2.5-pro).",
     )
     parser.add_argument(
-        "--output",
+        "--beaurocrat-model",
         type=str,
-        help="Directory where agent activity should happen.",
+        default="gemini-2.5-pro",
+        help="Model for the beaurocrat (default: gemini-2.5-pro).",
+    )
+    parser.add_argument(
+        "--clerk-turns",
+        type=int,
+        default=30,
+        help="Max tool-call turns per clerk invocation (default: 30).",
     )
     parser.add_argument(
         "--max-iterations",
         type=int,
         default=10,
-        help="Maximum number of agent loop iterations (default: 10).",
+        help="Maximum clerk/beaurocrat iterations (default: 10).",
+    )
+    parser.add_argument(
+        "--output",
+        type=str,
+        help="Working directory for the run.",
     )
     parser.add_argument(
         "--debug",
@@ -90,65 +93,92 @@ def main():
         help="Enable debug logging.",
     )
     parser.add_argument(
+        "--list-models",
+        action="store_true",
+        help="List available models and exit.",
+    )
+    parser.add_argument(
         "--mimo-server",
         type=str,
         default=None,
-        help="Base URL for MiMo API server (e.g., http://localhost:9001/v1).",
+        help="Base URL for MiMo API server.",
+    )
+    parser.add_argument(
+        "--log-file",
+        type=str,
+        default=None,
+        help="Path to logfile. Defaults to {output}/nopz.log when --output is set.",
+    )
+    parser.add_argument(
+        "--no-git",
+        action="store_true",
+        help="Disable git branch management. Files are created directly in the output directory.",
     )
 
     args = parser.parse_args()
 
+    # Patch llm library for reasoning_content support (MiMo, etc.)
+    patch_reasoning_content()
+
     if args.debug:
         logging.getLogger().setLevel(logging.DEBUG)
 
+    # Set up file logging
+    log_file = args.log_file
+    if not log_file and args.output:
+        log_file = os.path.join(args.output, "nopz.log")
+    if log_file:
+        log_path = Path(log_file)
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        file_handler = logging.FileHandler(log_path)
+        file_handler.setFormatter(
+            logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+        )
+        logging.getLogger().addHandler(file_handler)
+
     if args.list_models:
         import llm
-
         print("Available models:")
-        try:
-            # llm.get_models() is available in recent llm versions
-            for m in llm.get_models():
-                print(f"  - {m.model_id}")
-        except Exception as e:
-            logging.error(f"Failed to list models: {e}")
-            sys.exit(1)
+        for m in llm.get_models():
+            print(f"  - {m.model_id}")
         sys.exit(0)
 
-    if not args.conditions_files:
-        parser.error("the following arguments are required: conditions_files")
+    # Load regulations from all files
+    regulations = []
+    for file_path in args.regulations_files:
+        regulations.extend(load_regulations(file_path))
+    if not regulations:
+        logging.error("No regulations found. Nothing to do.")
+        sys.exit(1)
 
-    conditions = []
-    for file_path in args.conditions_files:
-        conditions.extend(load_conditions(file_path))
+    logging.info(f"Loaded {len(regulations)} regulation(s): {[r.name for r in regulations]}")
 
-    if not conditions:
-        logging.warning("No conditions found in the provided file(s).")
-        sys.exit(0)
-
+    # Chdir to output directory so clerk/beaurocrat work there directly
     if args.output:
-        output_dir = Path(args.output)
-        output_dir.mkdir(parents=True, exist_ok=True)
-        os.chdir(output_dir)
+        os.chdir(args.output)
 
-    # Initialize the agent
-    raw_agent = LLMAgent(model=args.model, base_url=args.mimo_server)
-
-    # Adapt the agent to match the Runner's expected protocol
-    adapted_agent = AgentAdapter(raw_agent)
-
-    # Initialize the runner
+    # Build components
+    clerk = Clerk(
+        model=args.clerk_model,
+        base_url=args.mimo_server,
+        turns=args.clerk_turns,
+    )
+    beaurocrat = Beaurocrat(
+        regulations=regulations,
+        llm_model=args.beaurocrat_model,
+        base_url=args.mimo_server,
+    )
     runner = Runner(
-        agent=adapted_agent,
-        conditions=conditions,
+        clerk=clerk,
+        beaurocrat=beaurocrat,
+        regulations=regulations,
         max_iterations=args.max_iterations,
+        use_git=not args.no_git,
     )
 
     try:
         success = runner.run()
-        if success:
-            sys.exit(0)
-        else:
-            sys.exit(1)
+        sys.exit(0 if success else 1)
     except KeyboardInterrupt:
         logging.info("Interrupted by user.")
         sys.exit(130)

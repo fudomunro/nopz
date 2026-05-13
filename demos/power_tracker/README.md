@@ -1,26 +1,51 @@
 # Power Tracker - NOPZ Demo
 
-Welcome to the **Power Tracker** demo application. This project serves as a trial and demonstration of **NOPZ** (Number One Point Zero), showcasing how an AI agent can be constrained and guided by a strict set of predefined conditions to build a functional application.
+A real-time web application that tracks the 10 most powerful people in the world and streams their simulated activities live.
 
 ## What is Power Tracker?
 
-Power Tracker is a web application designed to:
-1. List the 10 most powerful people in the world, ranked by their influence.
-2. Track and stream their activities in real-time via a live feed.
+Power Tracker is a web application that:
+1. Lists the 10 most powerful people in the world, ranked by influence.
+2. Generates simulated activities for them at random intervals.
+3. Streams those activities in real-time via Server-Sent Events.
 
-## NOPZ Conditions
+**Backend:** FastAPI + SSE | **Frontend:** Vanilla SPA | **Storage:** In-memory
 
-The development of this application is governed by NOPZ condition files. These files act as the ultimate source of truth and strict requirements for the AI agent building the system. By running NOPZ against these files, the agent is continuously prompted until all conditions are unequivocally met.
+## NOPZ Regulations
 
-The conditions for this project are modularized into the following domains:
+This application is governed by NOPZ regulations — Python functions that validate whether the codebase meets specific requirements. The NOPZ clerk makes changes, and the beaurocrat checks regulations. On success, changes merge automatically. On failure, the clerk retries with failure context.
 
-*   [`agents.nopz.md`](./agents.nopz.md): General development rules, code quality (PEP 8), testing, and architectural standards.
-*   [`backend.nopz.md`](./backend.nopz.md): API framework (FastAPI) requirements, core endpoints, data models, and error handling.
-*   [`frontend.nopz.md`](./frontend.nopz.md): UI/UX guidelines, technology stack (SPA), data integration, and real-time live feed constraints.
-*   [`data_source.nopz.md`](./data_source.nopz.md): Initial data seeding, in-memory storage, thread-safe data access, and autonomous mock activity generation.
+### Regulation Files
 
-## Next Steps
+| File | Domain | Regulations |
+|------|--------|-------------|
+| [`dev_standards.py`](./dev_standards.py) | Development | PEP 8, type hints, test coverage, dependencies |
+| [`backend.py`](./backend.py) | Backend | FastAPI, CORS, models, endpoints, SSE, error handling |
+| [`data_source.py`](./data_source.py) | Data | Seeding, thread safety, generator, activity cap |
+| [`frontend.py`](./frontend.py) | Frontend | SPA, people display, live feed, reconnection |
 
-To build this application, a NOPZ runner should be executed against the `.nopz.md` files in this directory. The agent will iteratively construct the backend, frontend, and data layers until all specified conditions report as `True`.
+### Running NOPZ
 
-*(Instructions for running the final application will be populated here once the NOPZ agent completes the implementation.)*
+```bash
+# Run all regulations against a target directory
+uv run nopz dev_standards.py backend.py data_source.py frontend.py --output ./runs/my_run
+
+# Run a single domain
+uv run nopz backend.py --output ./runs/my_run --clerk-model gemini-2.5-pro
+```
+
+## Running the Application
+
+The most complete implementation is in `runs/power_tracker_12/power_tracker/`:
+
+```bash
+cd runs/power_tracker_12/power_tracker
+pip install -r requirements.txt
+./run.sh
+```
+
+The backend starts on port 8000. Open `http://localhost:8000` in your browser.
+
+## Previous Runs
+
+The `runs/` directory contains outputs from earlier NOPZ agent runs, showing iterative progress toward satisfying all regulations. Each run represents a complete attempt by the clerk/beaurocrat cycle.

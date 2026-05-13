@@ -5,15 +5,13 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "nopz"
 version = "0.1.0"
-description = "A tool for repeatedly running an agent against a set of conditions until they are met."
+description = "Enforce regulations on a codebase using AI agents with separated validation and action."
 authors = [
     {name = "Alec"}
 ]
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "click",
-    "pyyaml",
     "llm>=0.29",
     "llm-gemini>=0.29",
     "openai",
