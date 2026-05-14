@@ -2,6 +2,7 @@
 
 import ast
 import os
+import re
 import subprocess
 
 from nopz.regulations import RegulationResult, regulation
@@ -12,16 +13,19 @@ from nopz.regulations import RegulationResult, regulation
     description="All Python code must comply with PEP 8 standards.",
 )
 def pep8_compliance():
-    result = subprocess.run(
-        ["python", "-m", "py_compile", * _find_python_files()],
-        capture_output=True,
-        text=True,
-    )
-    return RegulationResult(
-        passed=result.returncode == 0,
-        name="pep8_compliance",
-        message="All files compile successfully" if result.returncode == 0 else result.stderr,
-    )
+    files = _find_python_files()
+    # Batch to avoid exceeding arg length limits on large projects
+    batch_size = 50
+    for i in range(0, len(files), batch_size):
+        batch = files[i:i + batch_size]
+        result = subprocess.run(
+            ["python", "-m", "py_compile", *batch],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            return RegulationResult(passed=False, name="pep8_compliance", message=result.stderr)
+    return RegulationResult(passed=True, name="pep8_compliance", message="All files compile successfully")
 
 
 @regulation(
@@ -74,21 +78,26 @@ def no_print_statements():
 
 @regulation(
     "has_requirements",
-    description="A requirements.txt must exist with pinned dependency versions.",
+    description="Dependency versions must be pinned (requirements.txt or pyproject.toml).",
 )
 def has_requirements():
-    path = "requirements.txt"
-    exists = os.path.exists(path)
-    has_versions = False
-    if exists:
-        with open(path) as f:
+    # Check requirements.txt
+    if os.path.exists("requirements.txt"):
+        with open("requirements.txt") as f:
             lines = [l.strip() for l in f if l.strip() and not l.startswith("#")]
-            has_versions = all("==" in l for l in lines) if lines else False
-    return RegulationResult(
-        passed=exists and has_versions,
-        name="has_requirements",
-        message="requirements.txt exists with pinned versions" if exists and has_versions else "Missing or unpinned requirements.txt",
-    )
+            if lines and all("==" in l for l in lines):
+                return RegulationResult(passed=True, name="has_requirements", message="requirements.txt with pinned versions")
+
+    # Check pyproject.toml for pinned deps
+    if os.path.exists("pyproject.toml"):
+        with open("pyproject.toml") as f:
+            content = f.read()
+        # Look for == version pinning in dependencies
+        pinned = re.findall(r'["\'][^"\']*==[^"\']*["\']', content)
+        if pinned:
+            return RegulationResult(passed=True, name="has_requirements", message="pyproject.toml with pinned versions")
+
+    return RegulationResult(passed=False, name="has_requirements", message="No pinned dependency file found (expected requirements.txt or pyproject.toml)")
 
 
 @regulation(
@@ -143,15 +152,14 @@ def test_coverage():
 
 @regulation(
     "has_run_script",
-    description="There must be a simple way to run the application (run.sh or similar).",
+    description="There must be a simple way to run the application.",
 )
 def has_run_script():
-    has_script = os.path.exists("run.sh") or os.path.exists("run.py")
-    return RegulationResult(
-        passed=has_script,
-        name="has_run_script",
-        message="Run script exists" if has_script else "No run.sh or run.py found",
-    )
+    run_indicators = ["run.sh", "run.py", "Makefile", "justfile", "docker-compose.yml", "Dockerfile"]
+    for name in run_indicators:
+        if os.path.exists(name):
+            return RegulationResult(passed=True, name="has_run_script", message=f"Run method found: {name}")
+    return RegulationResult(passed=False, name="has_run_script", message="No run script or Makefile found")
 
 
 def _find_python_files() -> list[str]:

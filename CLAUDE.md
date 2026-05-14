@@ -46,10 +46,9 @@ nopz/
 ├── demos/
 │   ├── power_tracker/      # Demo app built by NOPZ (FastAPI backend + SPA frontend)
 │   │   ├── README.md
-│   │   ├── *.nopz.md       # Regulation files for the demo
+│   │   ├── *.py            # Regulation files for the demo
 │   │   └── runs/           # Agent run output
 │   └── modal/              # Modal deployment demo
-│       ├── modal.nopz.md
 │       ├── modal.py
 │       └── README.md
 └── .github/workflows/
@@ -95,7 +94,7 @@ uv pip install -e .[dev]
 # Run the tool (regulation files are Python modules with @regulation decorators)
 uv run nopz regulations.py
 uv run nopz regulations1.py regulations2.py  # multiple files
-uv run nopz demo.nopz.py --output ./runs/my_run --clerk-model gemini-2.5-pro
+uv run nopz backend.py --output ./runs/my_run --clerk-model gemini-2.5-pro
 
 # Run with MiMo (requires a running MiMo API server)
 uv run nopz regulations.py --clerk-model mimo-v2-flash --mimo-server http://localhost:9001/v1

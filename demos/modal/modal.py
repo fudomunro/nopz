@@ -1,5 +1,6 @@
 """Regulations for the Modal demo."""
 
+import glob
 import os
 import re
 
@@ -8,9 +9,11 @@ from nopz.regulations import RegulationResult, regulation
 
 def _find_html():
     """Find the main HTML file."""
-    for path in ["index.html", "static/index.html", "frontend/index.html"]:
-        if os.path.exists(path):
-            return path
+    for path in glob.glob("**/*.html", recursive=True):
+        parts = path.split(os.sep)
+        if any(d in parts for d in ("__pycache__", "runs", ".git", "node_modules", ".venv")):
+            continue
+        return path
     return None
 
 
