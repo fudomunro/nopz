@@ -5,6 +5,32 @@ import os
 from nopz.regulations import RegulationResult, regulation
 
 
+def _read_index_html() -> str:
+    """Read index.html content from common locations."""
+    for path in ["index.html", "frontend/index.html", "static/index.html"]:
+        if os.path.exists(path):
+            with open(path) as f:
+                return f.read()
+    return ""
+
+
+def _read_all_js() -> str:
+    """Read all JS file contents from common locations."""
+    parts = []
+    for path in ["script.js", "app.js", "frontend/script.js", "static/script.js", "static/app.js"]:
+        if os.path.exists(path):
+            with open(path) as f:
+                parts.append(f.read())
+    return "\n".join(parts)
+
+
+def _combined_frontend_content() -> str:
+    """Get combined JS content from both files and inline scripts in index.html."""
+    js = _read_all_js()
+    html = _read_index_html()
+    return js + "\n" + html
+
+
 @regulation(
     "has_index_html",
     description="Frontend entry point must be an index.html file.",
@@ -23,13 +49,9 @@ def has_index_html():
     description="UI displays the top 10 people with name, title, and country_or_organization.",
 )
 def people_display():
-    for path in ["index.html", "frontend/index.html", "static/index.html"]:
-        if os.path.exists(path):
-            with open(path) as f:
-                content = f.read().lower()
-                has_people_section = "people" in content or "powerful" in content
-                if has_people_section:
-                    return RegulationResult(passed=True, name="people_display", message="People display section found")
+    html = _read_index_html().lower()
+    if "people" in html or "powerful" in html:
+        return RegulationResult(passed=True, name="people_display", message="People display section found")
     return RegulationResult(passed=False, name="people_display", message="No people display section found")
 
 
@@ -38,13 +60,9 @@ def people_display():
     description="UI has a distinct Live Activity Feed section.",
 )
 def live_activity_feed():
-    for path in ["index.html", "frontend/index.html", "static/index.html"]:
-        if os.path.exists(path):
-            with open(path) as f:
-                content = f.read().lower()
-                has_feed = "activity" in content and ("feed" in content or "stream" in content or "live" in content)
-                if has_feed:
-                    return RegulationResult(passed=True, name="live_activity_feed", message="Live activity feed section found")
+    html = _read_index_html().lower()
+    if "activity" in html and ("feed" in html or "stream" in html or "live" in html):
+        return RegulationResult(passed=True, name="live_activity_feed", message="Live activity feed section found")
     return RegulationResult(passed=False, name="live_activity_feed", message="No live activity feed found")
 
 
@@ -53,12 +71,9 @@ def live_activity_feed():
     description="Frontend fetches people from GET /people on load.",
 )
 def fetches_people():
-    for path in ["script.js", "app.js", "frontend/script.js", "static/script.js", "static/app.js"]:
-        if os.path.exists(path):
-            with open(path) as f:
-                content = f.read()
-                if "fetch" in content and "people" in content:
-                    return RegulationResult(passed=True, name="fetches_people", message="Fetches /people found")
+    content = _combined_frontend_content()
+    if "fetch" in content and "people" in content:
+        return RegulationResult(passed=True, name="fetches_people", message="Fetches /people found")
     return RegulationResult(passed=False, name="fetches_people", message="No fetch /people found")
 
 
@@ -67,13 +82,10 @@ def fetches_people():
     description="Frontend connects to real-time endpoint (SSE or WebSocket).",
 )
 def sse_connection():
-    for path in ["script.js", "app.js", "frontend/script.js", "static/script.js", "static/app.js"]:
-        if os.path.exists(path):
-            with open(path) as f:
-                content = f.read()
-                has_sse = "EventSource" in content or "WebSocket" in content or "sse" in content.lower()
-                if has_sse:
-                    return RegulationResult(passed=True, name="sse_connection", message="SSE/WebSocket connection found")
+    content = _combined_frontend_content()
+    has_sse = "EventSource" in content or "WebSocket" in content or "sse" in content.lower()
+    if has_sse:
+        return RegulationResult(passed=True, name="sse_connection", message="SSE/WebSocket connection found")
     return RegulationResult(passed=False, name="sse_connection", message="No real-time connection found")
 
 
@@ -82,14 +94,11 @@ def sse_connection():
     description="UI gracefully handles connection drops and attempts to reconnect.",
 )
 def reconnect_handling():
-    for path in ["script.js", "app.js", "frontend/script.js", "static/script.js", "static/app.js"]:
-        if os.path.exists(path):
-            with open(path) as f:
-                content = f.read()
-                has_reconnect = "reconnect" in content.lower() or "retry" in content.lower() or "setTimeout" in content
-                has_error_handling = "error" in content.lower() and ("close" in content.lower() or "disconnect" in content.lower())
-                if has_reconnect and has_error_handling:
-                    return RegulationResult(passed=True, name="reconnect_handling", message="Reconnect handling found")
+    content = _combined_frontend_content()
+    has_reconnect = "reconnect" in content.lower() or "retry" in content.lower() or "setTimeout" in content
+    has_error_handling = "error" in content.lower() and ("close" in content.lower() or "disconnect" in content.lower())
+    if has_reconnect and has_error_handling:
+        return RegulationResult(passed=True, name="reconnect_handling", message="Reconnect handling found")
     return RegulationResult(passed=False, name="reconnect_handling", message="No reconnect handling found")
 
 
@@ -98,11 +107,7 @@ def reconnect_handling():
     description="UI shows connection status (Connected/Disconnected/Connecting).",
 )
 def status_indicator():
-    for path in ["index.html", "frontend/index.html", "static/index.html"]:
-        if os.path.exists(path):
-            with open(path) as f:
-                content = f.read().lower()
-                has_status = ("connected" in content or "disconnected" in content or "connecting" in content)
-                if has_status:
-                    return RegulationResult(passed=True, name="status_indicator", message="Status indicator found")
+    html = _read_index_html().lower()
+    if "connected" in html or "disconnected" in html or "connecting" in html:
+        return RegulationResult(passed=True, name="status_indicator", message="Status indicator found")
     return RegulationResult(passed=False, name="status_indicator", message="No connection status indicator found")
