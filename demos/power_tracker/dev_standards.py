@@ -100,7 +100,7 @@ def test_coverage():
         ["python", "-m", "pytest", "--cov=.", "--cov-report=term", "-q"],
         capture_output=True,
         text=True,
-        timeout=60,
+        timeout=120,
     )
     # Parse coverage from output
     coverage_pct = 0

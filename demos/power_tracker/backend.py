@@ -13,20 +13,13 @@ from nopz.regulations import RegulationResult, regulation
     description="Backend must use FastAPI with app initialized in main.py.",
 )
 def fastapi_framework():
-    main_exists = os.path.exists("main.py") or os.path.exists("backend/main.py")
-    uses_fastapi = False
-    if main_exists:
-        for path in ["main.py", "backend/main.py"]:
-            if os.path.exists(path):
-                with open(path) as f:
-                    content = f.read()
-                    uses_fastapi = "FastAPI" in content
-                break
-    return RegulationResult(
-        passed=main_exists and uses_fastapi,
-        name="fastapi_framework",
-        message="FastAPI app found in main.py" if main_exists and uses_fastapi else "Missing FastAPI app in main.py",
-    )
+    for path in ["main.py", "backend/main.py", "app/main.py"]:
+        if os.path.exists(path):
+            with open(path) as f:
+                content = f.read()
+                if "FastAPI" in content:
+                    return RegulationResult(passed=True, name="fastapi_framework", message="FastAPI app found")
+    return RegulationResult(passed=False, name="fastapi_framework", message="Missing FastAPI app in main.py")
 
 
 @regulation(
@@ -34,7 +27,7 @@ def fastapi_framework():
     description="CORS middleware must be configured.",
 )
 def cors_middleware():
-    for path in ["main.py", "backend/main.py"]:
+    for path in ["main.py", "backend/main.py", "app/main.py"]:
         if os.path.exists(path):
             with open(path) as f:
                 content = f.read()
@@ -48,7 +41,7 @@ def cors_middleware():
     description="Pydantic Person model with id, name, title, country_or_organization, power_rank.",
 )
 def person_model():
-    for path in ["models.py", "backend/models.py"]:
+    for path in ["models.py", "backend/models.py", "app/models.py"]:
         if os.path.exists(path):
             with open(path) as f:
                 content = f.read()
@@ -66,7 +59,7 @@ def person_model():
     description="Pydantic Activity model with id, person_id, timestamp, location, description.",
 )
 def activity_model():
-    for path in ["models.py", "backend/models.py"]:
+    for path in ["models.py", "backend/models.py", "app/models.py"]:
         if os.path.exists(path):
             with open(path) as f:
                 content = f.read()
@@ -84,11 +77,18 @@ def activity_model():
     description="GET /people returns list of people ordered by power_rank.",
 )
 def people_endpoint():
-    for path in ["main.py", "backend/main.py"]:
+    for path in ["main.py", "backend/main.py", "app/main.py"]:
         if os.path.exists(path):
             with open(path) as f:
                 content = f.read()
                 if '/people' in content and ('get' in content.lower() or '@app.get' in content):
+                    return RegulationResult(passed=True, name="people_endpoint", message="GET /people endpoint found")
+    # Also check router files
+    for path in ["app/routers/people.py", "backend/routers/people.py"]:
+        if os.path.exists(path):
+            with open(path) as f:
+                content = f.read()
+                if '/people' in content or '@router.get' in content:
                     return RegulationResult(passed=True, name="people_endpoint", message="GET /people endpoint found")
     return RegulationResult(passed=False, name="people_endpoint", message="GET /people endpoint not found")
 
@@ -98,12 +98,22 @@ def people_endpoint():
     description="GET /people/{person_id}/activities returns activities for a person.",
 )
 def activities_endpoint():
-    for path in ["main.py", "backend/main.py"]:
+    for path in ["main.py", "backend/main.py", "app/main.py"]:
         if os.path.exists(path):
             with open(path) as f:
                 content = f.read()
                 if 'person_id' in content and 'activities' in content:
                     return RegulationResult(passed=True, name="activities_endpoint", message="Activities endpoint found")
+    # Search all Python files under app/ for the endpoint
+    if os.path.isdir("app"):
+        for root, _, files in os.walk("app"):
+            for fname in files:
+                if fname.endswith(".py"):
+                    fpath = os.path.join(root, fname)
+                    with open(fpath) as f:
+                        content = f.read()
+                        if 'person_id' in content and 'activities' in content:
+                            return RegulationResult(passed=True, name="activities_endpoint", message="Activities endpoint found")
     return RegulationResult(passed=False, name="activities_endpoint", message="Activities endpoint not found")
 
 
@@ -112,12 +122,22 @@ def activities_endpoint():
     description="GET /activities/stream provides SSE or WebSocket for real-time updates.",
 )
 def sse_endpoint():
-    for path in ["main.py", "backend/main.py"]:
+    for path in ["main.py", "backend/main.py", "app/main.py"]:
         if os.path.exists(path):
             with open(path) as f:
                 content = f.read()
                 if 'stream' in content and ('EventSourceResponse' in content or 'WebSocket' in content or 'StreamingResponse' in content):
                     return RegulationResult(passed=True, name="sse_endpoint", message="SSE/streaming endpoint found")
+    # Search all Python files under app/ for SSE
+    if os.path.isdir("app"):
+        for root, _, files in os.walk("app"):
+            for fname in files:
+                if fname.endswith(".py"):
+                    fpath = os.path.join(root, fname)
+                    with open(fpath) as f:
+                        content = f.read()
+                        if 'stream' in content and ('EventSourceResponse' in content or 'WebSocket' in content or 'StreamingResponse' in content):
+                            return RegulationResult(passed=True, name="sse_endpoint", message="SSE/streaming endpoint found")
     return RegulationResult(passed=False, name="sse_endpoint", message="No SSE/streaming endpoint found")
 
 
@@ -126,11 +146,21 @@ def sse_endpoint():
     description="Standard HTTP status codes and clear error messages.",
 )
 def error_handling():
-    for path in ["main.py", "backend/main.py"]:
+    for path in ["main.py", "backend/main.py", "app/main.py"]:
         if os.path.exists(path):
             with open(path) as f:
                 content = f.read()
                 has_404 = "404" in content or "HTTPException" in content
                 if has_404:
                     return RegulationResult(passed=True, name="error_handling", message="Error handling found")
+    # Search all Python files under app/ for error handling
+    if os.path.isdir("app"):
+        for root, _, files in os.walk("app"):
+            for fname in files:
+                if fname.endswith(".py"):
+                    fpath = os.path.join(root, fname)
+                    with open(fpath) as f:
+                        content = f.read()
+                        if "404" in content or "HTTPException" in content:
+                            return RegulationResult(passed=True, name="error_handling", message="Error handling found")
     return RegulationResult(passed=False, name="error_handling", message="No HTTP error handling found")

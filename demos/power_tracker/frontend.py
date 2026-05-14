@@ -53,7 +53,7 @@ def live_activity_feed():
     description="Frontend fetches people from GET /people on load.",
 )
 def fetches_people():
-    for path in ["script.js", "app.js", "frontend/script.js", "static/script.js"]:
+    for path in ["script.js", "app.js", "frontend/script.js", "static/script.js", "static/app.js"]:
         if os.path.exists(path):
             with open(path) as f:
                 content = f.read()
@@ -67,7 +67,7 @@ def fetches_people():
     description="Frontend connects to real-time endpoint (SSE or WebSocket).",
 )
 def sse_connection():
-    for path in ["script.js", "app.js", "frontend/script.js", "static/script.js"]:
+    for path in ["script.js", "app.js", "frontend/script.js", "static/script.js", "static/app.js"]:
         if os.path.exists(path):
             with open(path) as f:
                 content = f.read()
@@ -82,7 +82,7 @@ def sse_connection():
     description="UI gracefully handles connection drops and attempts to reconnect.",
 )
 def reconnect_handling():
-    for path in ["script.js", "app.js", "frontend/script.js", "static/script.js"]:
+    for path in ["script.js", "app.js", "frontend/script.js", "static/script.js", "static/app.js"]:
         if os.path.exists(path):
             with open(path) as f:
                 content = f.read()

@@ -10,7 +10,7 @@ from nopz.regulations import RegulationResult, regulation
     description="Data source seeds exactly 10 profiles of the most powerful people.",
 )
 def seeds_10_people():
-    for path in ["repository.py", "data_store.py", "backend/repository.py", "backend/data_store.py"]:
+    for path in ["repository.py", "data_store.py", "backend/repository.py", "backend/data_store.py", "app/data.py", "app/store.py"]:
         if os.path.exists(path):
             with open(path) as f:
                 content = f.read()
@@ -25,7 +25,7 @@ def seeds_10_people():
     description="Data store must be thread-safe or concurrency-safe.",
 )
 def thread_safe_storage():
-    for path in ["repository.py", "data_store.py", "backend/repository.py", "backend/data_store.py"]:
+    for path in ["repository.py", "data_store.py", "backend/repository.py", "backend/data_store.py", "app/data.py", "app/store.py"]:
         if os.path.exists(path):
             with open(path) as f:
                 content = f.read()
@@ -39,7 +39,7 @@ def thread_safe_storage():
     description="Background routine generates Activity events at random intervals (2-8 seconds).",
 )
 def activity_generator():
-    for path in ["generator.py", "backend/generator.py"]:
+    for path in ["generator.py", "backend/generator.py", "app/activity_generator.py", "app/generator.py"]:
         if os.path.exists(path):
             with open(path) as f:
                 content = f.read()
@@ -55,7 +55,7 @@ def activity_generator():
     description="Generated activities must reference valid person_ids.",
 )
 def activity_references_valid_person():
-    for path in ["generator.py", "backend/generator.py"]:
+    for path in ["generator.py", "backend/generator.py", "app/activity_generator.py", "app/generator.py"]:
         if os.path.exists(path):
             with open(path) as f:
                 content = f.read()
@@ -69,7 +69,7 @@ def activity_references_valid_person():
     description="Data store caps activity history at 100 entries.",
 )
 def activity_capped_at_100():
-    for path in ["repository.py", "data_store.py", "backend/repository.py", "backend/data_store.py"]:
+    for path in ["repository.py", "data_store.py", "backend/repository.py", "backend/data_store.py", "app/data.py", "app/store.py"]:
         if os.path.exists(path):
             with open(path) as f:
                 content = f.read()
