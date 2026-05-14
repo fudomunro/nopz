@@ -106,11 +106,13 @@ def has_requirements():
 )
 def test_coverage():
     try:
+        cov_env = {**os.environ, "COVERAGE_SOURCE": ".", "COVERAGE_OMIT": ".venv/*,*/__pycache__/*,test_*"}
         result = subprocess.run(
             ["python", "-m", "pytest", "--cov=.", "--cov-report=term", "-q"],
             capture_output=True,
             text=True,
             timeout=120,
+            env=cov_env,
         )
     except subprocess.TimeoutExpired:
         return RegulationResult(
@@ -156,7 +158,7 @@ def _find_python_files() -> list[str]:
     """Find all Python files in the project, excluding runs/ and __pycache__/."""
     files = []
     for root, dirs, filenames in os.walk("."):
-        dirs[:] = [d for d in dirs if d not in ("__pycache__", "runs", ".git", "node_modules")]
+        dirs[:] = [d for d in dirs if d not in ("__pycache__", "runs", ".git", "node_modules", ".venv")]
         for fname in filenames:
             if fname.endswith(".py"):
                 files.append(os.path.join(root, fname))
