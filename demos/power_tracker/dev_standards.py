@@ -93,15 +93,35 @@ def has_requirements():
 
 @regulation(
     "test_coverage",
-    description="Test coverage should exceed 95%.",
+    description=(
+        "Test coverage should exceed 95%. "
+        "All tests must complete quickly (under 30 seconds total). "
+        "When testing async code: never mock asyncio.sleep with AsyncMock — "
+        "it prevents CancelledError delivery and causes tests to hang forever. "
+        "Instead, use a real async helper like `async def fast_sleep(d): await asyncio.sleep(0)` "
+        "or patch with `side_effect` set to a real async function. "
+        "If a task catches CancelledError internally, do not also catch it in the test — "
+        "the task will complete normally."
+    ),
 )
 def test_coverage():
-    result = subprocess.run(
-        ["python", "-m", "pytest", "--cov=.", "--cov-report=term", "-q"],
-        capture_output=True,
-        text=True,
-        timeout=120,
-    )
+    try:
+        result = subprocess.run(
+            ["python", "-m", "pytest", "--cov=.", "--cov-report=term", "-q"],
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+    except subprocess.TimeoutExpired:
+        return RegulationResult(
+            passed=False,
+            name="test_coverage",
+            message=(
+                "Tests timed out after 120 seconds (tests may be hanging). "
+                "Common causes: mocking asyncio.sleep with AsyncMock prevents "
+                "CancelledError delivery. Use a real async sleep helper instead."
+            ),
+        )
     # Parse coverage from output
     coverage_pct = 0
     for line in result.stdout.splitlines():
