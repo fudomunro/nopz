@@ -8,7 +8,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from nopz.agent import (
-    LLMAgent,
     RunFinishedException,
     _register_extra_model,
     execute_shell_command,
@@ -131,82 +130,3 @@ def test_register_extra_model_updates_existing(tmp_path: Path):
         data = yaml.safe_load(f)
     entry = next(m for m in data if m["model_id"] == "existing")
     assert entry["supports_tools"] is True
-
-
-def test_llmaagent_init():
-    agent = LLMAgent(model="test-model", base_url="http://localhost:8000/v1")
-    assert agent.model_name == "test-model"
-    assert agent.base_url == "http://localhost:8000/v1"
-
-
-def test_llmaagent_enforce_conditions_unknown_model():
-    agent = LLMAgent(model="nonexistent-model")
-    with patch("nopz.agent.llm") as mock_llm:
-        mock_llm.UnknownModelError = Exception
-        mock_llm.get_model.side_effect = Exception("Model not found")
-        actions, summary, usage = agent.enforce_conditions(["condition A"])
-    assert actions is True
-    assert "not found" in summary
-
-
-def test_llmaagent_enforce_conditions_gemini_key(monkeypatch):
-    monkeypatch.setenv("GOOGLE_API_KEY", "test-key-123")
-    agent = LLMAgent(model="gemini-2.5-pro")
-    mock_model = MagicMock()
-    mock_conversation = MagicMock()
-    mock_model.conversation.return_value = mock_conversation
-    # Simulate chain returning without finish_run
-    mock_conversation.chain.return_value = iter([])
-
-    with patch("nopz.agent.llm") as mock_llm:
-        mock_llm.get_model.return_value = mock_model
-        actions, summary, usage = agent.enforce_conditions(["cond A"])
-    assert mock_model.key == "test-key-123"
-
-
-def test_llmaagent_enforce_conditions_mimo_key(monkeypatch):
-    monkeypatch.setenv("MIMO_API_KEY", "mimo-key-456")
-    agent = LLMAgent(model="mimo-v2.5", base_url="http://localhost:9001/v1")
-    mock_model = MagicMock()
-    mock_conversation = MagicMock()
-    mock_model.conversation.return_value = mock_conversation
-    mock_conversation.chain.return_value = iter([])
-
-    with patch("nopz.agent.llm") as mock_llm:
-        mock_llm.get_model.return_value = mock_model
-        actions, summary, usage = agent.enforce_conditions(["cond A"])
-    assert mock_model.key == "mimo-key-456"
-    assert mock_model.api_base == "http://localhost:9001/v1"
-
-
-def test_llmaagent_enforce_conditions_finish_run():
-    agent = LLMAgent(model="test-model")
-    mock_model = MagicMock()
-    mock_conversation = MagicMock()
-    mock_model.conversation.return_value = mock_conversation
-
-    def fake_chain(prompt, system=None, tools=None, chain_limit=100):
-        # Simulate finish_run being called
-        raise RunFinishedException(False, "nothing to do")
-
-    mock_conversation.chain.side_effect = fake_chain
-
-    with patch("nopz.agent.llm") as mock_llm:
-        mock_llm.get_model.return_value = mock_model
-        actions, summary, usage = agent.enforce_conditions(["cond A"])
-    assert actions is False
-    assert summary == "nothing to do"
-
-
-def test_llmaagent_enforce_conditions_exception():
-    agent = LLMAgent(model="test-model")
-    mock_model = MagicMock()
-    mock_conversation = MagicMock()
-    mock_model.conversation.return_value = mock_conversation
-    mock_conversation.chain.side_effect = RuntimeError("API error")
-
-    with patch("nopz.agent.llm") as mock_llm:
-        mock_llm.get_model.return_value = mock_model
-        actions, summary, usage = agent.enforce_conditions(["cond A"])
-    assert actions is True
-    assert "API error" in summary

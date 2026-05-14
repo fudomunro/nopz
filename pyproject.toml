@@ -15,6 +15,7 @@ dependencies = [
     "llm>=0.29",
     "llm-gemini>=0.29",
     "openai",
+    "pyyaml",
 ]
 
 [project.optional-dependencies]

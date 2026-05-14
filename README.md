@@ -2,14 +2,14 @@
 
 > *"You are technically correct, the BEST kind of correct."* – Number 1.0, Futurama
 
-**NOPZ** is a CLI tool that repeatedly runs an AI agent against a predefined set of conditions. It enforces strict compliance by continuously prompting the agent to take action until the agent determines that **no further actions are required** for the conditions to be true.
+**NOPZ** is a CLI tool that enforces regulations on a codebase using a two-agent system. A **Clerk** makes changes to satisfy regulations, and a **Beaurocrat** validates them. The loop repeats until all regulations pass or the iteration limit is reached.
 
 ## How it Works
 
-1. **Define Conditions:** You provide a file containing a list of conditions or rules.
-2. **Agent Evaluation:** NOPZ feeds these conditions to an AI agent (powered by the `llm` library, defaulting to Gemini) along with the current state or context.
-3. **Action & Loop:** The agent attempts to satisfy the conditions. NOPZ then re-evaluates the state.
-4. **Termination:** The tool only exits successfully when a run of the agent requires zero actions to ensure all conditions are met.
+1. **Define Regulations:** Write Python functions decorated with `@regulation` that define conditions a codebase must satisfy.
+2. **Clerk Modifies:** NOPZ feeds the regulations to an AI Clerk (powered by the `llm` library, defaulting to Gemini) which uses tools to inspect and modify the codebase.
+3. **Beaurocrat Validates:** A Beaurocrat runs deterministic checks on each regulation against the current state.
+4. **Loop or Merge:** If all regulations pass, changes are merged (in git mode). If not, failure context is passed to the next Clerk iteration. The loop repeats until success or the iteration limit is reached.
 
 ## Current Status
 
@@ -25,7 +25,9 @@ NOPZ uses the `llm` library and defaults to `gemini-2.5-pro`. You must set your 
 
 ## Usage
 
-    $ uv run nopz conditions.txt
+    $ uv run nopz regulations.py
+
+See `CLAUDE.md` for full CLI options and architecture details.
 
 ## Roadmap
 

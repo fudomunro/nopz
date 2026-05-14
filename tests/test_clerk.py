@@ -1,5 +1,6 @@
 """Tests for the Clerk class."""
 
+import os
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -116,6 +117,3 @@ def test_clerk_failure_context_in_prompt():
     assert "Previous validation FAILED" in prompt
     assert "reg_x" in prompt
     assert "broken" in prompt
-
-
-import os

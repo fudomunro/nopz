@@ -292,6 +292,7 @@ dependencies = [
     { name = "llm" },
     { name = "llm-gemini" },
     { name = "openai" },
+    { name = "pyyaml" },
 ]
 
 [package.optional-dependencies]
@@ -305,6 +306,7 @@ requires-dist = [
     { name = "llm-gemini", specifier = ">=0.29" },
     { name = "openai" },
     { name = "pytest", marker = "extra == 'dev'" },
+    { name = "pyyaml" },
 ]
 provides-extras = ["dev"]
 
