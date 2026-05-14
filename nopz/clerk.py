@@ -119,6 +119,7 @@ class Clerk:
                 output_tokens += getattr(r, "output_tokens", 0) or 0
             return {"input": input_tokens, "output": output_tokens}
 
+        response = None
         try:
             response = conversation.chain(
                 prompt,
@@ -139,4 +140,5 @@ class Clerk:
 
         except Exception as e:
             logger.error(f"Clerk error: {e}")
-            return f"Clerk error: {e}", {}
+            usage = get_usage(response) if response is not None else {"input": 0, "output": 0}
+            return f"Clerk error: {e}", usage

@@ -94,7 +94,7 @@ def test_clerk_chain_limit_error():
         mock_llm.get_model.return_value = mock_model
         summary, usage = c.work([_make_reg("a")])
     assert "Chain limit" in summary
-    assert usage == {}
+    assert usage == {"input": 0, "output": 0}
 
 
 def test_clerk_failure_context_in_prompt():
