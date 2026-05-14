@@ -110,7 +110,10 @@ def has_requirements():
         "Instead, use a real async helper like `async def fast_sleep(d): await asyncio.sleep(0)` "
         "or patch with `side_effect` set to a real async function. "
         "If a task catches CancelledError internally, do not also catch it in the test — "
-        "the task will complete normally."
+        "the task will complete normally. "
+        "SSE or streaming endpoints that block on asyncio.Event.wait() without a running "
+        "background task will hang tests. Use a test fixture that triggers FastAPI lifespan "
+        "events, or mock the event so the stream can yield."
     ),
 )
 def test_coverage():
@@ -129,8 +132,11 @@ def test_coverage():
             name="test_coverage",
             message=(
                 "Tests timed out after 120 seconds (tests may be hanging). "
-                "Common causes: mocking asyncio.sleep with AsyncMock prevents "
-                "CancelledError delivery. Use a real async sleep helper instead."
+                "Common causes: (1) mocking asyncio.sleep with AsyncMock prevents "
+                "CancelledError delivery — use a real async sleep helper instead; "
+                "(2) SSE/streaming endpoints blocking on asyncio.Event.wait() with no "
+                "background task — trigger FastAPI lifespan events in your test fixture "
+                "or mock the event."
             ),
         )
     # Parse coverage from output

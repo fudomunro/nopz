@@ -49,16 +49,20 @@ def _import_names(tree: ast.Module) -> set[str]:
     description="Data source seeds exactly 10 profiles of the most powerful people.",
 )
 def seeds_10_people():
+    person_keys = {"name", "title", "id", "power_rank", "country"}
     for tree in _parse_all():
         for node in ast.walk(tree):
             # Look for a list literal with exactly 10 elements
             if isinstance(node, ast.List) and len(node.elts) == 10:
-                # Check if elements look person-like (dicts with person-related keys)
+                # Check if elements look person-like (dicts or constructor calls)
                 for elt in node.elts:
                     if isinstance(elt, ast.Dict):
                         keys = [k.value for k in elt.keys if isinstance(k, ast.Constant)]
-                        person_keys = {"name", "title", "id", "power_rank", "country"}
                         if set(keys) & person_keys:
+                            return RegulationResult(passed=True, name="seeds_10_people", message="Seeds 10 people found")
+                    elif isinstance(elt, ast.Call) and isinstance(elt.func, ast.Name):
+                        kw_names = {kw.arg for kw in elt.keywords if kw.arg}
+                        if kw_names & person_keys:
                             return RegulationResult(passed=True, name="seeds_10_people", message="Seeds 10 people found")
     return RegulationResult(passed=False, name="seeds_10_people", message="No seed logic for 10 people found")
 

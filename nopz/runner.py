@@ -7,6 +7,7 @@ The runner coordinates the cycle:
 """
 
 import logging
+import re
 import subprocess
 from typing import Optional
 
@@ -27,6 +28,20 @@ def _git(*args: str) -> str:
     if result.returncode != 0:
         logger.error(f"git {' '.join(args)} failed: {result.stderr}")
     return result.stdout.strip()
+
+
+_TRANSIENT_PATTERNS = [
+    re.compile(r"\b40[08]\b"),  # 400 Bad Request, 408 Timeout
+    re.compile(r"\b429\b"),  # Rate limit
+    re.compile(r"\b50[0-4]\b"),  # 500, 502, 503, 504
+    re.compile(r"connection.*(?:closed|reset|refused|timeout|prematurely)", re.IGNORECASE),
+    re.compile(r"timed?\s*out", re.IGNORECASE),
+]
+
+
+def _is_transient_error(summary: str) -> bool:
+    """Check if a clerk error summary indicates a transient/retryable failure."""
+    return any(p.search(summary) for p in _TRANSIENT_PATTERNS)
 
 
 class Runner:
@@ -89,10 +104,12 @@ class Runner:
                 total_usage["input"] += usage.get("input", 0)
                 total_usage["output"] += usage.get("output", 0)
 
-                # Chain limit errors are recoverable — the clerk made progress,
-                # so validate what exists and continue iterating.
+                # Recoverable clerk errors: chain limit (partial progress) and
+                # transient API/network errors (retryable).
                 if summary.startswith("Clerk error:") and "Chain limit" in summary:
                     logger.warning(f"Clerk hit turn limit: {summary}. Validating progress.")
+                elif summary.startswith("Clerk error:") and _is_transient_error(summary):
+                    logger.warning(f"Clerk hit transient error: {summary}. Retrying next iteration.")
                 elif summary.startswith("Clerk error:"):
                     logger.warning(f"Clerk failed: {summary}. Skipping validation.")
                     logger.error("Clerk error is not recoverable. Aborting.")

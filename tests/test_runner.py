@@ -7,7 +7,7 @@ import pytest
 from nopz.beaurocrat import Beaurocrat
 from nopz.clerk import Clerk
 from nopz.regulations import Regulation, RegulationResult
-from nopz.runner import Runner
+from nopz.runner import Runner, _is_transient_error
 
 
 def _make_regulation(name: str) -> Regulation:
@@ -131,6 +131,69 @@ def test_non_chain_limit_clerk_error_aborts(mock_git: MagicMock):
     # Only called once — aborted immediately
     assert clerk.work.call_count == 1
     # Beaurocrat never validated
+    beaurocrat.validate_all.assert_not_called()
+
+
+def test_is_transient_error_matches_patterns():
+    assert _is_transient_error("Clerk error: 400 - Connection prematurely closed")
+    assert _is_transient_error("Clerk error: Error code: 502 Bad Gateway")
+    assert _is_transient_error("Clerk error: 408 Request Timeout")
+    assert _is_transient_error("Clerk error: 429 Too Many Requests")
+    assert _is_transient_error("Clerk error: Connection reset by peer")
+    assert _is_transient_error("Clerk error: timed out")
+    assert not _is_transient_error("Clerk error: Model 'bad' not found.")
+    assert not _is_transient_error("Clerk error: Chain limit of 30 exceeded.")
+    assert not _is_transient_error("Clerk completed work.")
+
+
+@patch("nopz.runner._git")
+def test_transient_api_error_is_recoverable(mock_git: MagicMock):
+    """Transient API errors should retry, not abort."""
+    regs = [_make_regulation("reg_a")]
+    fail_result = RegulationResult(passed=False, name="reg_a", message="not met")
+    pass_result = RegulationResult(passed=True, name="reg_a")
+
+    clerk = MagicMock(spec=Clerk)
+    clerk.work.side_effect = [
+        ("Clerk error: 400 - Connection prematurely closed BEFORE response", {"input": 0, "output": 0}),
+        ("Clerk completed work.", {"input": 10, "output": 5}),
+    ]
+    beaurocrat = MagicMock(spec=Beaurocrat)
+    beaurocrat.validate_all.side_effect = [
+        [fail_result],  # validation after transient error
+        [pass_result],  # validation after successful retry
+    ]
+    beaurocrat.all_passed.side_effect = [False, True]
+    beaurocrat.failures.return_value = [fail_result]
+
+    runner = Runner(
+        clerk=clerk,
+        beaurocrat=beaurocrat,
+        regulations=regs,
+        max_iterations=5,
+        use_git=False,
+    )
+    assert runner.run() is True
+    assert clerk.work.call_count == 2
+
+
+@patch("nopz.runner._git")
+def test_non_transient_clerk_error_still_aborts(mock_git: MagicMock):
+    """Non-transient errors (e.g. unknown model) should still abort."""
+    regs = [_make_regulation("reg_a")]
+    clerk = MagicMock(spec=Clerk)
+    clerk.work.return_value = ("Clerk error: Model 'bad-model' not found.", {"input": 0, "output": 0})
+    beaurocrat = _make_beaurocrat([])
+
+    runner = Runner(
+        clerk=clerk,
+        beaurocrat=beaurocrat,
+        regulations=regs,
+        max_iterations=5,
+        use_git=False,
+    )
+    assert runner.run() is False
+    assert clerk.work.call_count == 1
     beaurocrat.validate_all.assert_not_called()
 
 

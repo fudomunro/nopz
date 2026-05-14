@@ -149,10 +149,7 @@ def activity_model():
                     fields = _class_fields(node)
                     if required.issubset(fields):
                         return RegulationResult(passed=True, name="activity_model", message="Activity model has all required fields")
-                    missing = required - fields
-                    if missing.issubset(required) and len(fields) > 0:
-                        return RegulationResult(passed=False, name="activity_model", message=f"Activity model missing: {missing}")
-    return RegulationResult(passed=False, name="activity_model", message="No Pydantic model with required fields found")
+    return RegulationResult(passed=False, name="activity_model", message="Activity model not found or missing required fields")
 
 
 @regulation(
