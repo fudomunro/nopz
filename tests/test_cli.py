@@ -1,5 +1,5 @@
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -113,4 +113,91 @@ def test_main_with_output(tmp_path: Path):
         with pytest.raises(SystemExit) as excinfo:
             main()
 
+        assert excinfo.value.code == 0
+
+
+def test_main_no_regulations_exits(tmp_path: Path):
+    test_file = tmp_path / "empty.py"
+    test_file.write_text("# no regulations here\n")
+
+    with (
+        patch("sys.argv", ["nopz", str(test_file)]),
+        pytest.raises(SystemExit) as excinfo,
+    ):
+        main()
+    assert excinfo.value.code == 1
+
+
+def test_main_keyboard_interrupt(tmp_path: Path):
+    test_file = tmp_path / "regs.py"
+    test_file.write_text(
+        'from nopz.regulations import regulation, RegulationResult\n\n'
+        '@regulation("r")\n'
+        'def r():\n'
+        '    return RegulationResult(passed=True, name="r")\n'
+    )
+
+    with (
+        patch("sys.argv", ["nopz", str(test_file)]),
+        patch("nopz.runner.Runner.run", side_effect=KeyboardInterrupt),
+        pytest.raises(SystemExit) as excinfo,
+    ):
+        main()
+    assert excinfo.value.code == 130
+
+
+def test_main_generic_exception(tmp_path: Path):
+    test_file = tmp_path / "regs.py"
+    test_file.write_text(
+        'from nopz.regulations import regulation, RegulationResult\n\n'
+        '@regulation("r")\n'
+        'def r():\n'
+        '    return RegulationResult(passed=True, name="r")\n'
+    )
+
+    with (
+        patch("sys.argv", ["nopz", str(test_file)]),
+        patch("nopz.runner.Runner.run", side_effect=RuntimeError("boom")),
+        pytest.raises(SystemExit) as excinfo,
+    ):
+        main()
+    assert excinfo.value.code == 1
+
+
+def test_main_list_models(tmp_path: Path):
+    test_file = tmp_path / "regs.py"
+    test_file.write_text(
+        'from nopz.regulations import regulation, RegulationResult\n\n'
+        '@regulation("r")\n'
+        'def r():\n'
+        '    return RegulationResult(passed=True, name="r")\n'
+    )
+
+    mock_model = MagicMock()
+    mock_model.model_id = "test-model-1"
+
+    with (
+        patch("sys.argv", ["nopz", str(test_file), "--list-models"]),
+        patch("llm.get_models", return_value=[mock_model]),
+        pytest.raises(SystemExit) as excinfo,
+    ):
+        main()
+    assert excinfo.value.code == 0
+
+
+def test_main_debug_flag(tmp_path: Path):
+    test_file = tmp_path / "regs.py"
+    test_file.write_text(
+        'from nopz.regulations import regulation, RegulationResult\n\n'
+        '@regulation("r")\n'
+        'def r():\n'
+        '    return RegulationResult(passed=True, name="r")\n'
+    )
+
+    with (
+        patch("sys.argv", ["nopz", str(test_file), "--debug"]),
+        patch("nopz.runner.Runner.run", return_value=True),
+    ):
+        with pytest.raises(SystemExit) as excinfo:
+            main()
         assert excinfo.value.code == 0

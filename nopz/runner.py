@@ -40,6 +40,7 @@ class Runner:
         max_iterations: int = 10,
         branch_prefix: str = "nopz/",
         use_git: bool = True,
+        stuck_limit: int = 2,
     ):
         self.clerk = clerk
         self.beaurocrat = beaurocrat
@@ -47,6 +48,7 @@ class Runner:
         self.max_iterations = max_iterations
         self.branch_prefix = branch_prefix
         self.use_git = use_git
+        self.stuck_limit = stuck_limit
 
     def run(self) -> bool:
         """Run the clerk/beaurocrat loop.
@@ -70,6 +72,8 @@ class Runner:
         timeline: list[str] = []
         total_usage = {"input": 0, "output": 0}
         failure_context: Optional[list[RegulationResult]] = None
+        previous_failed: Optional[set[str]] = None
+        consecutive_stuck = 0
 
         for iteration in range(1, self.max_iterations + 1):
             logger.info(f"--- Iteration {iteration}/{self.max_iterations} ---")
@@ -134,6 +138,7 @@ class Runner:
                 # Validation failed — record failures for next iteration
                 failure_context = self.beaurocrat.failures(results)
                 failed_names = [f.name for f in failure_context]
+                failed_set = set(failed_names)
                 timeline.append(
                     f"Iteration {iteration} (beaurocrat): FAILED — {', '.join(failed_names)}"
                 )
@@ -142,10 +147,28 @@ class Runner:
             except Exception as e:
                 logger.error(f"Error during iteration {iteration}: {e}")
                 timeline.append(f"Iteration {iteration}: ERROR — {e}")
+                failed_set = previous_failed  # no change on error
 
             finally:
                 if self.use_git:
                     _git("checkout", original_branch)
+
+            # Detect stuck clerk — same regulations failing repeatedly
+            if previous_failed is not None and failed_set == previous_failed:
+                consecutive_stuck += 1
+            else:
+                consecutive_stuck = 0
+            previous_failed = failed_set
+
+            if consecutive_stuck >= self.stuck_limit:
+                logger.error(
+                    f"Clerk stuck: same {len(failed_set)} regulation(s) failing for "
+                    f"{consecutive_stuck + 1} consecutive iterations. Aborting."
+                )
+                timeline.append(
+                    f"Iteration {iteration}: STUCK — same regulations failing repeatedly"
+                )
+                break
 
         logger.warning(
             f"Reached maximum iterations ({self.max_iterations}) without all regulations passing."

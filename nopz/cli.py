@@ -83,6 +83,12 @@ def main():
         help="Maximum clerk/beaurocrat iterations (default: 10).",
     )
     parser.add_argument(
+        "--stuck-limit",
+        type=int,
+        default=2,
+        help="Abort after N consecutive iterations with identical failures (default: 2).",
+    )
+    parser.add_argument(
         "--output",
         type=str,
         help="Working directory for the run.",
@@ -174,6 +180,7 @@ def main():
         regulations=regulations,
         max_iterations=args.max_iterations,
         use_git=not args.no_git,
+        stuck_limit=args.stuck_limit,
     )
 
     try:

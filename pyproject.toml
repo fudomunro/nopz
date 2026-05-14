@@ -25,5 +25,10 @@ dev = [
 [project.scripts]
 nopz = "nopz.cli:main"
 
+[tool.coverage.run]
+omit = [
+    "nopz/test_llm_*.py",
+]
+
 [tool.setuptools.packages.find]
 include = ["nopz", "nopz.*"]
