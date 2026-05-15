@@ -113,11 +113,10 @@ def live_activity_feed():
 @regulation(
     "fetches_people",
     description=(
-        "Frontend must retrieve data from a /people API endpoint on page "
-        "load. Passing requires any .js or .html file to contain the "
-        "substring '/people'. Scope: all .js and .html files excluding "
-        "directories __pycache__, runs, .git, node_modules, and .venv. "
-        "Missing or unreadable files are skipped."
+        "Frontend must retrieve data from a /people API endpoint when the "
+        "page loads. Scope: all .js and .html files excluding directories "
+        "__pycache__, runs, .git, node_modules, and .venv. Missing or "
+        "unreadable files are skipped."
     ),
 )
 def fetches_people():
@@ -130,12 +129,10 @@ def fetches_people():
 @regulation(
     "sse_connection",
     description=(
-        "Frontend JavaScript or HTML must establish a real-time connection "
-        "(e.g. EventSource, WebSocket, or other streaming mechanism). Passing "
-        "requires the combined content to contain 'EventSource', 'WebSocket', "
-        "or 'sse' (case-insensitive). Scope: all .js and .html files excluding "
-        "directories __pycache__, runs, .git, node_modules, and .venv. "
-        "Missing or unreadable files are skipped."
+        "Frontend must establish a real-time connection to the backend using "
+        "a streaming mechanism such as SSE or WebSocket. Scope: all .js and "
+        ".html files excluding directories __pycache__, runs, .git, "
+        "node_modules, and .venv. Missing or unreadable files are skipped."
     ),
 )
 def sse_connection():
@@ -150,11 +147,9 @@ def sse_connection():
     "reconnect_handling",
     description=(
         "Frontend must detect disconnections and automatically retry the "
-        "connection. Passing requires at least one .js or .html file to "
-        "contain 'reconnect' or 'retry' AND to contain 'error' together "
-        "with 'close' or 'disconnect' (all case-insensitive). Scope: all "
-        ".js and .html files excluding directories __pycache__, runs, .git, "
-        "node_modules, and .venv. Missing or unreadable files are skipped."
+        "connection. Scope: all .js and .html files excluding directories "
+        "__pycache__, runs, .git, node_modules, and .venv. Missing or "
+        "unreadable files are skipped."
     ),
 )
 def reconnect_handling():

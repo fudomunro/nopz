@@ -74,8 +74,9 @@ def seeds_10_people():
 @regulation(
     "thread_safe_storage",
     description=(
-        "Data store must be safe for concurrent access from multiple "
-        "threads or async tasks. Scope: non-test Python source files. "
+        "Data store must protect shared state from concurrent access. "
+        "The check passes if the code imports threading, asyncio, Lock, "
+        "RLock, Semaphore, or Queue. Scope: non-test Python source files. "
         "Missing or unparseable files are skipped."
     ),
 )
@@ -91,9 +92,11 @@ def thread_safe_storage():
 @regulation(
     "activity_generator",
     description=(
-        "A background routine must continuously generate activity events "
-        "at regular intervals. Scope: non-test Python source files. "
-        "Missing or unparseable files are skipped."
+        "A background routine must continuously generate Activity events "
+        "in a loop with a sleep delay between iterations. The check passes "
+        "if a function contains both a while-loop and a sleep() call. "
+        "Scope: non-test Python source files. Missing or unparseable files "
+        "are skipped."
     ),
 )
 def activity_generator():
@@ -139,9 +142,11 @@ def activity_references_valid_person():
 @regulation(
     "activity_capped_at_100",
     description=(
-        "Data store must cap activity history at a maximum of 100 entries, "
-        "removing oldest entries when the limit is reached. Scope: non-test "
-        "Python source files. Missing or unparseable files are skipped."
+        "Data store must cap activity history at a maximum of 100 entries. "
+        "The check passes if the code compares against the literal 100 or "
+        "a named constant combining 'max'/'cap'/'limit' with 'activit', "
+        "or slices with upper bound 100. Scope: non-test Python source "
+        "files. Missing or unparseable files are skipped."
     ),
 )
 def activity_capped_at_100():

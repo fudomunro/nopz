@@ -101,10 +101,11 @@ def no_print_statements():
 @regulation(
     "has_requirements",
     description=(
-        "Project must declare dependencies with pinned versions in either "
-        "requirements.txt (all lines containing '==') or pyproject.toml "
-        "(dependencies with '==' version specifiers). The check handles "
-        "missing files gracefully."
+        "Project must declare dependencies with pinned versions. The check "
+        "passes if requirements.txt exists with all non-comment, non-empty "
+        "lines containing '==' (e.g. 'flask==2.0.1'), or if pyproject.toml "
+        "exists with dependency strings containing '=='. Missing files "
+        "result in a clear failure."
     ),
 )
 def has_requirements():
@@ -178,9 +179,10 @@ def test_coverage():
     "has_run_script",
     description=(
         "Project must provide a way to run the application. The check passes "
-        "if the working directory contains any executable entry point file "
-        "(e.g. a shell script, Python script, Makefile, or container "
-        "configuration)."
+        "if the working directory contains at least one of: run.sh, run.py, "
+        "Makefile, justfile, docker-compose.yml, or Dockerfile. Each is "
+        "checked with os.path.exists(). Missing files are treated as absent, "
+        "not as errors."
     ),
 )
 def has_run_script():

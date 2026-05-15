@@ -225,9 +225,11 @@ def sse_endpoint():
 @regulation(
     "error_handling",
     description=(
-        "Backend must handle HTTP errors and return appropriate status codes "
-        "for invalid requests. Scope: non-test Python source files. Missing "
-        "or unparseable files are skipped."
+        "Backend must handle HTTP errors by returning error responses with "
+        "status codes such as 404 (Not Found) or 422 (Unprocessable Entity). "
+        "The check passes if the code imports HTTPException or uses "
+        "status_code keyword arguments. Scope: non-test Python source files. "
+        "Missing or unparseable files are skipped."
     ),
 )
 def error_handling():
