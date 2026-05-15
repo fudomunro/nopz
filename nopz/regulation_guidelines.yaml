@@ -14,6 +14,15 @@ guidelines:
       choices. For example, check that "all tests pass" rather than "tests
       use pytest with --tb=short". The clerk needs freedom to choose tools.
 
+      However, when a check is deterministic (static code analysis without
+      running the code), inspecting code patterns is acceptable because
+      outcomes cannot be observed directly. In such cases, checking for
+      specific imports, code structures, or naming conventions is a valid
+      proxy for the intended outcome. Only flag this guideline when the
+      check could reasonably validate the outcome without inspecting
+      implementation patterns (e.g., by running the code or checking
+      external state).
+
   - id: single_concern
     name: Single Concern
     description: >
