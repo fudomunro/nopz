@@ -33,3 +33,6 @@ omit = [
 
 [tool.setuptools.packages.find]
 include = ["nopz", "nopz.*"]
+
+[tool.setuptools.package-data]
+nopz = ["regulation_guidelines.yaml"]

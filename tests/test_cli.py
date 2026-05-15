@@ -2,9 +2,11 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+import yaml
 
 from nopz.cli import load_regulations, main
 from nopz import regulations as reg_module
+from nopz.number_one import ReviewResult
 from nopz.regulations import RegulationResult, regulation, get_regulations
 
 
@@ -87,7 +89,7 @@ def test_main_with_multiple_files(tmp_path: Path):
     )
 
     with (
-        patch("sys.argv", ["nopz", str(file_a), str(file_b)]),
+        patch("sys.argv", ["nopz", str(file_a), str(file_b), "--skip-review"]),
         patch("nopz.runner.Runner.run", return_value=True),
     ):
         with pytest.raises(SystemExit) as excinfo:
@@ -107,7 +109,7 @@ def test_main_with_output(tmp_path: Path):
     output_dir = tmp_path / "output_dir"
 
     with (
-        patch("sys.argv", ["nopz", str(test_file), "--output", str(output_dir)]),
+        patch("sys.argv", ["nopz", str(test_file), "--output", str(output_dir), "--skip-review"]),
         patch("nopz.runner.Runner.run", return_value=True),
     ):
         with pytest.raises(SystemExit) as excinfo:
@@ -138,7 +140,7 @@ def test_main_keyboard_interrupt(tmp_path: Path):
     )
 
     with (
-        patch("sys.argv", ["nopz", str(test_file)]),
+        patch("sys.argv", ["nopz", str(test_file), "--skip-review"]),
         patch("nopz.runner.Runner.run", side_effect=KeyboardInterrupt),
         pytest.raises(SystemExit) as excinfo,
     ):
@@ -156,7 +158,7 @@ def test_main_generic_exception(tmp_path: Path):
     )
 
     with (
-        patch("sys.argv", ["nopz", str(test_file)]),
+        patch("sys.argv", ["nopz", str(test_file), "--skip-review"]),
         patch("nopz.runner.Runner.run", side_effect=RuntimeError("boom")),
         pytest.raises(SystemExit) as excinfo,
     ):
@@ -195,9 +197,139 @@ def test_main_debug_flag(tmp_path: Path):
     )
 
     with (
-        patch("sys.argv", ["nopz", str(test_file), "--debug"]),
+        patch("sys.argv", ["nopz", str(test_file), "--debug", "--skip-review"]),
         patch("nopz.runner.Runner.run", return_value=True),
     ):
         with pytest.raises(SystemExit) as excinfo:
             main()
         assert excinfo.value.code == 0
+
+
+# --- Number One Point Zero review integration tests ---
+
+
+def _review_pass_results(*args, **kwargs):
+    """Helper: mock NumberOne.review returning all-pass results."""
+    return [ReviewResult(passed=True, regulation_name="r")]
+
+
+def test_main_skip_review(tmp_path: Path):
+    test_file = tmp_path / "regs.py"
+    test_file.write_text(
+        'from nopz.regulations import regulation, RegulationResult\n\n'
+        '@regulation("r")\n'
+        'def r():\n'
+        '    return RegulationResult(passed=True, name="r")\n'
+    )
+
+    with (
+        patch("sys.argv", ["nopz", str(test_file), "--skip-review"]),
+        patch("nopz.runner.Runner.run", return_value=True) as mock_run,
+    ):
+        with pytest.raises(SystemExit) as excinfo:
+            main()
+        assert excinfo.value.code == 0
+        mock_run.assert_called_once()
+
+
+def test_main_review_passes_continues(tmp_path: Path):
+    test_file = tmp_path / "regs.py"
+    test_file.write_text(
+        'from nopz.regulations import regulation, RegulationResult\n\n'
+        '@regulation("r")\n'
+        'def r():\n'
+        '    return RegulationResult(passed=True, name="r")\n'
+    )
+
+    with (
+        patch("sys.argv", ["nopz", str(test_file)]),
+        patch("nopz.number_one.NumberOne.review", side_effect=_review_pass_results),
+        patch("nopz.runner.Runner.run", return_value=True) as mock_run,
+    ):
+        with pytest.raises(SystemExit) as excinfo:
+            main()
+        assert excinfo.value.code == 0
+        mock_run.assert_called_once()
+
+
+def test_main_review_fails_exits(tmp_path: Path):
+    test_file = tmp_path / "regs.py"
+    test_file.write_text(
+        'from nopz.regulations import regulation, RegulationResult\n\n'
+        '@regulation("r")\n'
+        'def r():\n'
+        '    return RegulationResult(passed=True, name="r")\n'
+    )
+
+    fail_results = [ReviewResult(passed=False, regulation_name="r", issues=["too vague"])]
+
+    with (
+        patch("sys.argv", ["nopz", str(test_file)]),
+        patch("nopz.number_one.NumberOne.review", return_value=fail_results),
+        pytest.raises(SystemExit) as excinfo,
+    ):
+        main()
+    assert excinfo.value.code == 1
+
+
+def test_main_nopz_model_flag(tmp_path: Path):
+    test_file = tmp_path / "regs.py"
+    test_file.write_text(
+        'from nopz.regulations import regulation, RegulationResult\n\n'
+        '@regulation("r")\n'
+        'def r():\n'
+        '    return RegulationResult(passed=True, name="r")\n'
+    )
+
+    with (
+        patch("sys.argv", ["nopz", str(test_file), "--nopz-model", "gemini-2.5-flash"]),
+        patch("nopz.number_one.NumberOne.__init__", return_value=None) as mock_init,
+        patch("nopz.number_one.NumberOne.review", side_effect=_review_pass_results),
+        patch("nopz.number_one.NumberOne.all_passed", return_value=True),
+        patch("nopz.runner.Runner.run", return_value=True),
+    ):
+        with pytest.raises(SystemExit) as excinfo:
+            main()
+        assert excinfo.value.code == 0
+        _, kwargs = mock_init.call_args
+        assert kwargs["model_name"] == "gemini-2.5-flash"
+
+
+def test_main_guidelines_flag(tmp_path: Path):
+    test_file = tmp_path / "regs.py"
+    test_file.write_text(
+        'from nopz.regulations import regulation, RegulationResult\n\n'
+        '@regulation("r")\n'
+        'def r():\n'
+        '    return RegulationResult(passed=True, name="r")\n'
+    )
+    guidelines_file = tmp_path / "custom.yaml"
+    guidelines_file.write_text(
+        yaml.dump({"guidelines": [{"id": "test", "name": "Test", "description": "A test"}]})
+    )
+
+    with (
+        patch("sys.argv", ["nopz", str(test_file), "--guidelines", str(guidelines_file)]),
+        patch("nopz.number_one.NumberOne.review", side_effect=_review_pass_results),
+        patch("nopz.runner.Runner.run", return_value=True),
+    ):
+        with pytest.raises(SystemExit) as excinfo:
+            main()
+        assert excinfo.value.code == 0
+
+
+def test_main_guidelines_missing_file_exits(tmp_path: Path):
+    test_file = tmp_path / "regs.py"
+    test_file.write_text(
+        'from nopz.regulations import regulation, RegulationResult\n\n'
+        '@regulation("r")\n'
+        'def r():\n'
+        '    return RegulationResult(passed=True, name="r")\n'
+    )
+
+    with (
+        patch("sys.argv", ["nopz", str(test_file), "--guidelines", "/nonexistent.yaml"]),
+        pytest.raises(SystemExit) as excinfo,
+    ):
+        main()
+    assert excinfo.value.code == 1

@@ -1,0 +1,64 @@
+guidelines:
+  - id: clear_pass_criteria
+    name: Clear Pass/Fail Criteria
+    description: >
+      Each regulation must have objectively determinable pass/fail criteria.
+      A human reading the regulation should be able to predict the outcome
+      without running it. Regulations that rely on vague thresholds like
+      "reasonable" or "sufficient" without numeric bounds are non-deterministic.
+
+  - id: no_implementation_detail
+    name: No Implementation Detail in Checks
+    description: >
+      Regulation check functions should validate outcomes, not implementation
+      choices. For example, check that "all tests pass" rather than "tests
+      use pytest with --tb=short". The clerk needs freedom to choose tools.
+
+  - id: single_concern
+    name: Single Concern
+    description: >
+      Each regulation should enforce one thing. Regulations that combine
+      multiple unrelated requirements (e.g., "has tests AND documentation
+      AND type hints") should be split into separate regulations. This
+      allows the clerk to address failures independently.
+
+  - id: robust_check_logic
+    name: Robust Check Logic
+    description: >
+      Check functions must handle edge cases: missing files, empty
+      directories, commands that might not be installed. A regulation
+      that crashes with a FileNotFoundError when the target file does
+      not exist is itself broken. Checks should return a clear failure
+      message rather than raising exceptions.
+
+  - id: actionable_description
+    name: Actionable Description
+    description: >
+      The regulation description must give the clerk enough information
+      to know what changes to make. Descriptions like "code quality" are
+      too vague. Descriptions should specify exactly what is expected,
+      e.g., "All Python functions must have type hints for arguments and
+      return values."
+
+  - id: no_brittle_paths
+    name: No Brittle Path Assumptions
+    description: >
+      Regulations should not hardcode file paths or assume a specific
+      directory structure beyond what is standard. The clerk may create
+      files in unexpected locations. Use glob patterns or walk the
+      directory tree rather than checking specific paths.
+
+  - id: idempotent_check
+    name: Idempotent Check
+    description: >
+      Running the same check multiple times on an unchanged codebase
+      must produce the same result. Regulations that depend on external
+      state (network, time, random seeds) without mocking are unreliable.
+
+  - id: appropriate_scope
+    name: Appropriate Scope
+    description: >
+      Regulations should scope their checks appropriately. Checking
+      "no print statements" should exclude test files, scripts, and
+      __pycache__. Walking the entire filesystem root when only a
+      specific directory matters is a scope error.

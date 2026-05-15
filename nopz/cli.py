@@ -13,6 +13,7 @@ from pathlib import Path
 from nopz.beaurocrat import Beaurocrat
 from nopz.clerk import Clerk
 from nopz.llm_compat import patch_reasoning_content
+from nopz.number_one import NumberOne, load_guidelines
 from nopz.regulations import Regulation, get_regulations
 from nopz.runner import Runner
 
@@ -120,6 +121,23 @@ def main():
         action="store_true",
         help="Disable git branch management. Files are created directly in the output directory.",
     )
+    parser.add_argument(
+        "--nopz-model",
+        type=str,
+        default=None,
+        help="Model for regulation review (default: same as --beaurocrat-model).",
+    )
+    parser.add_argument(
+        "--guidelines",
+        type=str,
+        default=None,
+        help="Path to YAML guidelines file for regulation review. Uses built-in defaults if omitted.",
+    )
+    parser.add_argument(
+        "--skip-review",
+        action="store_true",
+        help="Skip the Number One Point Zero regulation review step.",
+    )
 
     args = parser.parse_args()
 
@@ -158,6 +176,35 @@ def main():
         sys.exit(1)
 
     logging.info(f"Loaded {len(regulations)} regulation(s): {[r.name for r in regulations]}")
+
+    # --- Number One Point Zero: regulation review ---
+    if not args.skip_review:
+        nopz_model = args.nopz_model or args.beaurocrat_model
+        try:
+            guidelines = load_guidelines(args.guidelines)
+        except FileNotFoundError as e:
+            logging.error(str(e))
+            sys.exit(1)
+
+        number_one = NumberOne(
+            guidelines=guidelines,
+            model_name=nopz_model,
+            base_url=args.mimo_server,
+        )
+        logging.info("Number One Point Zero: reviewing regulations...")
+        review_results = number_one.review(regulations)
+
+        if not number_one.all_passed(review_results):
+            logging.error("Regulation review FAILED. Fix the following issues:\n")
+            for result in number_one.failures(review_results):
+                logging.error(f"  Regulation: {result.regulation_name}")
+                for issue in result.issues:
+                    logging.error(f"    - {issue}")
+                logging.error("")
+            logging.error("Exiting. Please fix the regulations and try again.")
+            sys.exit(1)
+
+        logging.info("Number One Point Zero: all regulations approved.")
 
     # Chdir to output directory so clerk/beaurocrat work there directly
     if args.output:

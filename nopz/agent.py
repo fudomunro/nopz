@@ -120,6 +120,33 @@ def finish_run(actions_taken: bool, summary: str) -> str:
     raise RunFinishedException(actions_taken, str(summary))
 
 
+def _setup_model(model_name: str, base_url: str | None = None) -> llm.Model:
+    """Configure and return an llm model instance."""
+    if base_url:
+        _register_extra_model(model_name)
+
+    # Inject API keys before get_model — OpenAI plugin checks env var immediately
+    if "mimo" in model_name.lower():
+        mimo_key = os.environ.get("MIMO_API_KEY")
+        if mimo_key and not os.environ.get("OPENAI_API_KEY"):
+            os.environ["OPENAI_API_KEY"] = mimo_key
+
+    model = llm.get_model(model_name)
+
+    if "gemini" in model_name.lower():
+        api_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
+        if api_key:
+            model.key = api_key
+    if "mimo" in model_name.lower():
+        api_key = os.environ.get("MIMO_API_KEY")
+        if api_key:
+            model.key = api_key
+    if base_url:
+        model.api_base = base_url
+
+    return model
+
+
 def _register_extra_model(model_id: str) -> None:
     """Register a custom OpenAI-compatible model in the llm library's extra models config.
 

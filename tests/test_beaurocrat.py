@@ -5,7 +5,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from nopz.beaurocrat import Beaurocrat, _setup_model
+from nopz.agent import _setup_model
+from nopz.beaurocrat import Beaurocrat
 from nopz.regulations import Regulation, RegulationResult
 
 
@@ -93,7 +94,7 @@ def test_failures_empty():
 def test_setup_model_gemini(monkeypatch):
     monkeypatch.setenv("GOOGLE_API_KEY", "g-key")
     mock_model = MagicMock()
-    with patch("nopz.beaurocrat.llm") as mock_llm:
+    with patch("nopz.agent.llm") as mock_llm:
         mock_llm.get_model.return_value = mock_model
         result = _setup_model("gemini-2.5-pro")
     assert result.key == "g-key"
@@ -103,7 +104,7 @@ def test_setup_model_gemini_no_key(monkeypatch):
     monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     mock_model = MagicMock()
-    with patch("nopz.beaurocrat.llm") as mock_llm:
+    with patch("nopz.agent.llm") as mock_llm:
         mock_llm.get_model.return_value = mock_model
         result = _setup_model("gemini-2.5-pro")
     assert result == mock_model
@@ -113,7 +114,7 @@ def test_setup_model_gemini_fallback_key(monkeypatch):
     monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
     monkeypatch.setenv("GEMINI_API_KEY", "fallback-key")
     mock_model = MagicMock()
-    with patch("nopz.beaurocrat.llm") as mock_llm:
+    with patch("nopz.agent.llm") as mock_llm:
         mock_llm.get_model.return_value = mock_model
         result = _setup_model("gemini-2.5-pro")
     assert result.key == "fallback-key"
@@ -122,7 +123,7 @@ def test_setup_model_gemini_fallback_key(monkeypatch):
 def test_setup_model_mimo(monkeypatch):
     monkeypatch.setenv("MIMO_API_KEY", "m-key")
     mock_model = MagicMock()
-    with patch("nopz.beaurocrat.llm") as mock_llm:
+    with patch("nopz.agent.llm") as mock_llm:
         mock_llm.get_model.return_value = mock_model
         result = _setup_model("mimo-v2.5")
     assert result.key == "m-key"
@@ -131,7 +132,7 @@ def test_setup_model_mimo(monkeypatch):
 def test_setup_model_mimo_no_key(monkeypatch):
     monkeypatch.delenv("MIMO_API_KEY", raising=False)
     mock_model = MagicMock()
-    with patch("nopz.beaurocrat.llm") as mock_llm:
+    with patch("nopz.agent.llm") as mock_llm:
         mock_llm.get_model.return_value = mock_model
         result = _setup_model("mimo-v2.5")
     assert result == mock_model
@@ -141,7 +142,7 @@ def test_setup_model_mimo_openai_fallback(monkeypatch):
     monkeypatch.setenv("MIMO_API_KEY", "mimo-fb")
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     mock_model = MagicMock()
-    with patch("nopz.beaurocrat.llm") as mock_llm:
+    with patch("nopz.agent.llm") as mock_llm:
         mock_llm.get_model.return_value = mock_model
         _setup_model("mimo-v2.5")
     assert os.environ.get("OPENAI_API_KEY") == "mimo-fb"
@@ -149,7 +150,7 @@ def test_setup_model_mimo_openai_fallback(monkeypatch):
 
 def test_setup_model_with_base_url():
     mock_model = MagicMock()
-    with patch("nopz.beaurocrat.llm") as mock_llm, \
+    with patch("nopz.agent.llm") as mock_llm, \
          patch("nopz.agent._register_extra_model") as mock_reg:
         mock_llm.get_model.return_value = mock_model
         result = _setup_model("custom-model", base_url="http://localhost:8000/v1")
