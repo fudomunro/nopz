@@ -37,7 +37,7 @@ def _read_all_html() -> str:
         try:
             with open(fpath) as f:
                 parts.append(f.read())
-        except Exception:
+        except (OSError, UnicodeDecodeError):
             pass
     return "\n".join(parts)
 
@@ -49,7 +49,7 @@ def _read_all_js() -> str:
         try:
             with open(fpath) as f:
                 parts.append(f.read())
-        except Exception:
+        except (OSError, UnicodeDecodeError):
             pass
     return "\n".join(parts)
 
@@ -61,7 +61,11 @@ def _combined_frontend_content() -> str:
 
 @regulation(
     "has_index_html",
-    description="Frontend entry point must be an index.html file.",
+    description=(
+        "Frontend must have an index.html file as the application entry point. "
+        "The check scans for any file named index.html, excluding directories "
+        "__pycache__, runs, .git, node_modules, and .venv."
+    ),
 )
 def has_index_html():
     exists = any(os.path.basename(f) == "index.html" for f in _find_html_files())
@@ -74,7 +78,13 @@ def has_index_html():
 
 @regulation(
     "people_display",
-    description="UI displays the top 10 people with name, title, and country_or_organization.",
+    description=(
+        "Frontend HTML must contain a section that displays people data. "
+        "Passing requires the HTML content to contain the word 'people' or "
+        "'powerful' (case-insensitive). Scope: all HTML files excluding "
+        "directories __pycache__, runs, .git, node_modules, and .venv. "
+        "Missing or unreadable files are skipped."
+    ),
 )
 def people_display():
     html = _read_all_html().lower()
@@ -85,7 +95,13 @@ def people_display():
 
 @regulation(
     "live_activity_feed",
-    description="UI has a distinct Live Activity Feed section.",
+    description=(
+        "Frontend HTML must contain a section for real-time activity events. "
+        "Passing requires the HTML content to contain the word 'activity' AND "
+        "at least one of 'feed', 'stream', or 'live' (case-insensitive). "
+        "Scope: all HTML files excluding directories __pycache__, runs, .git, "
+        "node_modules, and .venv. Missing or unreadable files are skipped."
+    ),
 )
 def live_activity_feed():
     html = _read_all_html().lower()
@@ -96,18 +112,29 @@ def live_activity_feed():
 
 @regulation(
     "fetches_people",
-    description="Frontend fetches people from GET /people on load.",
+    description=(
+        "Frontend must retrieve data from a /people API endpoint when the "
+        "page loads. Scope: all .js and .html files excluding directories "
+        "__pycache__, runs, .git, node_modules, and .venv. Missing or "
+        "unreadable files are skipped."
+    ),
 )
 def fetches_people():
     content = _combined_frontend_content()
-    if "fetch" in content and "people" in content:
+    if "/people" in content:
         return RegulationResult(passed=True, name="fetches_people", message="Fetches /people found")
-    return RegulationResult(passed=False, name="fetches_people", message="No fetch /people found")
+    return RegulationResult(passed=False, name="fetches_people", message="No /people endpoint call found")
 
 
 @regulation(
     "sse_connection",
-    description="Frontend connects to real-time endpoint (SSE or WebSocket).",
+    description=(
+        "Frontend must establish a real-time connection to the backend using "
+        "SSE or WebSocket. The check passes if any .js or .html file "
+        "contains 'EventSource', 'WebSocket', or 'sse'. Scope: all .js "
+        "and .html files excluding directories __pycache__, runs, .git, "
+        "node_modules, and .venv. Missing or unreadable files are skipped."
+    ),
 )
 def sse_connection():
     content = _combined_frontend_content()
@@ -119,11 +146,18 @@ def sse_connection():
 
 @regulation(
     "reconnect_handling",
-    description="UI gracefully handles connection drops and attempts to reconnect.",
+    description=(
+        "Frontend must detect disconnections and automatically retry the "
+        "connection. The check passes if any .js or .html file contains "
+        "'reconnect' or 'retry' AND contains 'error' with 'close' or "
+        "'disconnect'. Scope: all .js and .html files excluding directories "
+        "__pycache__, runs, .git, node_modules, and .venv. Missing or "
+        "unreadable files are skipped."
+    ),
 )
 def reconnect_handling():
     content = _combined_frontend_content().lower()
-    has_reconnect = "reconnect" in content or "retry" in content or "settimeout" in content
+    has_reconnect = "reconnect" in content or "retry" in content
     has_error_handling = "error" in content and ("close" in content or "disconnect" in content)
     if has_reconnect and has_error_handling:
         return RegulationResult(passed=True, name="reconnect_handling", message="Reconnect handling found")
@@ -132,7 +166,13 @@ def reconnect_handling():
 
 @regulation(
     "status_indicator",
-    description="UI shows connection status (Connected/Disconnected/Connecting).",
+    description=(
+        "Frontend HTML must display the current connection state. Passing "
+        "requires the HTML content (case-insensitive) to contain at least "
+        "one of: 'connected', 'disconnected', or 'connecting'. Scope: all "
+        "HTML files excluding directories __pycache__, runs, .git, "
+        "node_modules, and .venv. Missing or unreadable files are skipped."
+    ),
 )
 def status_indicator():
     html = _read_all_html().lower()

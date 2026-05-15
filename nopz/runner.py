@@ -1,8 +1,8 @@
-"""Runner — orchestrates the clerk/beaurocrat workflow.
+"""Runner — orchestrates the clerk/bureaucrat workflow.
 
 The runner coordinates the cycle:
   1. Clerk makes changes
-  2. Beaurocrat validates
+  2. Bureaucrat validates
   3. Merge on pass (git mode), retry on failure
 """
 
@@ -12,7 +12,7 @@ import re
 import subprocess
 from typing import Optional
 
-from nopz.beaurocrat import Beaurocrat
+from nopz.bureaucrat import Bureaucrat
 from nopz.clerk import Clerk
 from nopz.regulations import Regulation, RegulationResult
 
@@ -46,12 +46,12 @@ def _is_transient_error(summary: str) -> bool:
 
 
 class Runner:
-    """Orchestrates the clerk/beaurocrat loop."""
+    """Orchestrates the clerk/bureaucrat loop."""
 
     def __init__(
         self,
         clerk: Clerk,
-        beaurocrat: Beaurocrat,
+        bureaucrat: Bureaucrat,
         regulations: list[Regulation],
         max_iterations: int = 10,
         branch_prefix: str = "nopz/",
@@ -59,7 +59,7 @@ class Runner:
         stuck_limit: int = 2,
     ):
         self.clerk = clerk
-        self.beaurocrat = beaurocrat
+        self.bureaucrat = bureaucrat
         self.regulations = regulations
         self.max_iterations = max_iterations
         self.branch_prefix = branch_prefix
@@ -67,7 +67,7 @@ class Runner:
         self.stuck_limit = stuck_limit
 
     def run(self) -> bool:
-        """Run the clerk/beaurocrat loop.
+        """Run the clerk/bureaucrat loop.
 
         Returns:
             True if all regulations passed, False if max iterations reached.
@@ -137,15 +137,15 @@ class Runner:
                     else:
                         logger.info("No changes to commit.")
 
-                # Beaurocrat validates
-                logger.info("Beaurocrat validating regulations...")
-                results = self.beaurocrat.validate_all()
+                # Bureaucrat validates
+                logger.info("Bureaucrat validating regulations...")
+                results = self.bureaucrat.validate_all()
 
                 for r in results:
                     status = "PASS" if r.passed else "FAIL"
                     logger.info(f"  {r.name}: {status} — {r.message}")
 
-                if self.beaurocrat.all_passed(results):
+                if self.bureaucrat.all_passed(results):
                     if self.use_git:
                         logger.info("All regulations passed. Merging.")
                         _git("checkout", original_branch)
@@ -165,11 +165,11 @@ class Runner:
                     return True
 
                 # Validation failed — record failures for next iteration
-                failure_context = self.beaurocrat.failures(results)
+                failure_context = self.bureaucrat.failures(results)
                 failed_names = [f.name for f in failure_context]
                 failed_set = set(failed_names)
                 timeline.append(
-                    f"Iteration {iteration} (beaurocrat): FAILED — {', '.join(failed_names)}"
+                    f"Iteration {iteration} (bureaucrat): FAILED — {', '.join(failed_names)}"
                 )
                 logger.info(f"Validation failed: {', '.join(failed_names)}")
 

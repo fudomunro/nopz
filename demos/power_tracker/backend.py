@@ -17,14 +17,14 @@ def _find_python_files() -> list[str]:
     return files
 
 
-def _parse_all() -> list[ast.Module]:
-    """Parse all Python files and return their ASTs."""
+def _parse_all() -> list[tuple[str, ast.Module]]:
+    """Parse all Python files and return (path, AST) tuples."""
     trees = []
     for fpath in _find_python_files():
         try:
             with open(fpath) as f:
-                trees.append(ast.parse(f.read()))
-        except SyntaxError:
+                trees.append((fpath, ast.parse(f.read())))
+        except (SyntaxError, OSError, UnicodeDecodeError):
             pass
     return trees
 
@@ -79,13 +79,17 @@ def _route_paths(tree: ast.Module) -> list[str]:
 
 @regulation(
     "fastapi_framework",
-    description="Backend must use FastAPI with an app instance.",
+    description=(
+        "Backend application must define an ASGI app instance that provides "
+        "automatic request/response validation and OpenAPI documentation. "
+        "Scope: non-test Python source files. Missing or unparseable files "
+        "are skipped."
+    ),
 )
 def fastapi_framework():
-    for tree in _parse_all():
+    for _fpath, tree in _parse_all():
         names = _import_names(tree)
         if "fastapi" in names:
-            # Check for FastAPI() call
             for node in ast.walk(tree):
                 if isinstance(node, ast.Call):
                     func = node.func
@@ -97,14 +101,18 @@ def fastapi_framework():
 
 @regulation(
     "cors_middleware",
-    description="CORS middleware must be configured.",
+    description=(
+        "Backend must allow cross-origin HTTP requests from any origin. "
+        "The check passes if any Python file imports CORSMiddleware or "
+        "calls add_middleware() with CORSMiddleware. Scope: non-test Python "
+        "source files. Missing or unparseable files are skipped."
+    ),
 )
 def cors_middleware():
-    for tree in _parse_all():
+    for _fpath, tree in _parse_all():
         names = _import_names(tree)
         if "CORSMiddleware" in names:
             return RegulationResult(passed=True, name="cors_middleware", message="CORS middleware configured")
-        # Also check for add_middleware(CORSMiddleware, ...) pattern
         for node in ast.walk(tree):
             if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
                 if node.func.attr == "add_middleware":
@@ -117,11 +125,17 @@ def cors_middleware():
 
 @regulation(
     "person_model",
-    description="Pydantic Person model with id, name, title, country_or_organization, power_rank.",
+    description=(
+        "A Pydantic model must define annotated fields with types: "
+        "id (str or int), name (str), title (str), "
+        "country_or_organization (str), and power_rank (int or float). "
+        "The model must inherit from BaseModel. Scope: non-test Python "
+        "source files. Missing or unparseable files are skipped."
+    ),
 )
 def person_model():
     required = {"id", "name", "title", "country_or_organization", "power_rank"}
-    for tree in _parse_all():
+    for _fpath, tree in _parse_all():
         for node in ast.walk(tree):
             if isinstance(node, ast.ClassDef):
                 bases = _base_class_names(node)
@@ -137,11 +151,16 @@ def person_model():
 
 @regulation(
     "activity_model",
-    description="Pydantic Activity model with id, person_id, timestamp, location, description.",
+    description=(
+        "A Pydantic model must define annotated fields: id, person_id, "
+        "timestamp, location, and description. The model must inherit from "
+        "BaseModel. Scope: non-test Python source files. Missing or unparseable "
+        "files are skipped."
+    ),
 )
 def activity_model():
     required = {"id", "person_id", "timestamp", "location", "description"}
-    for tree in _parse_all():
+    for _fpath, tree in _parse_all():
         for node in ast.walk(tree):
             if isinstance(node, ast.ClassDef):
                 bases = _base_class_names(node)
@@ -154,10 +173,14 @@ def activity_model():
 
 @regulation(
     "people_endpoint",
-    description="GET /people returns list of people ordered by power_rank.",
+    description=(
+        "Backend must define an HTTP route handler whose path contains '/people'. "
+        "Scope: non-test Python source files. Missing or unparseable files "
+        "are skipped."
+    ),
 )
 def people_endpoint():
-    for tree in _parse_all():
+    for _fpath, tree in _parse_all():
         for path in _route_paths(tree):
             if "/people" in path:
                 return RegulationResult(passed=True, name="people_endpoint", message="GET /people endpoint found")
@@ -166,10 +189,15 @@ def people_endpoint():
 
 @regulation(
     "activities_endpoint",
-    description="GET /people/{person_id}/activities returns activities for a person.",
+    description=(
+        "Backend must define an HTTP route handler whose path contains both "
+        "'person_id' and 'activit' (e.g. /people/{person_id}/activities). "
+        "Scope: non-test Python source files. Missing or unparseable files "
+        "are skipped."
+    ),
 )
 def activities_endpoint():
-    for tree in _parse_all():
+    for _fpath, tree in _parse_all():
         for path in _route_paths(tree):
             if "person_id" in path and "activit" in path:
                 return RegulationResult(passed=True, name="activities_endpoint", message="Activities endpoint found")
@@ -178,11 +206,15 @@ def activities_endpoint():
 
 @regulation(
     "sse_endpoint",
-    description="GET /activities/stream provides SSE or WebSocket for real-time updates.",
+    description=(
+        "Backend must define an HTTP route that delivers real-time streaming "
+        "data via SSE, streaming response, or WebSocket. Scope: non-test "
+        "Python source files. Missing or unparseable files are skipped."
+    ),
 )
 def sse_endpoint():
     sse_imports = {"EventSourceResponse", "StreamingResponse", "WebSocket"}
-    for tree in _parse_all():
+    for _fpath, tree in _parse_all():
         names = _import_names(tree)
         if names & sse_imports:
             for path in _route_paths(tree):
@@ -193,14 +225,23 @@ def sse_endpoint():
 
 @regulation(
     "error_handling",
-    description="Standard HTTP status codes and clear error messages.",
+    description=(
+        "Backend must handle HTTP errors by returning error responses with "
+        "status codes such as 404 (Not Found) or 422 (Unprocessable Entity). "
+        "The check passes if the code imports HTTPException or uses "
+        "status_code keyword arguments. Scope: Python source files whose "
+        "basename does not start with 'test_' and that are not in a 'tests' "
+        "directory. Missing or unparseable files are skipped."
+    ),
 )
 def error_handling():
-    for tree in _parse_all():
+    for _fpath, tree in _parse_all():
+        basename = os.path.basename(_fpath)
+        if basename.startswith("test_") or os.sep + "tests" + os.sep in _fpath:
+            continue
         names = _import_names(tree)
         if "HTTPException" in names:
             return RegulationResult(passed=True, name="error_handling", message="Error handling found")
-        # Check for status_code=404 in route decorators or raises
         for node in ast.walk(tree):
             if isinstance(node, ast.Call):
                 for kw in node.keywords:

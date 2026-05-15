@@ -1,50 +1,20 @@
-"""Beaurocrat — runs regulations against the current state.
+"""Bureaucrat — runs regulations against the current state.
 
-The beaurocrat is the "senior bureaucrat" that validates whether
+The bureaucrat is the "senior bureaucrat" that validates whether
 a codebase satisfies all regulations. It runs deterministic checks
 and optionally uses LLM-based validation for subjective regulations.
 """
 
 import logging
-import os
 from typing import Optional
 
-import llm
-
+from nopz.agent import _setup_model
 from nopz.regulations import Regulation, RegulationResult
 
 logger = logging.getLogger(__name__)
 
 
-def _setup_model(model_name: str, base_url: Optional[str] = None) -> llm.Model:
-    """Configure and return an llm model instance."""
-    if base_url:
-        from nopz.agent import _register_extra_model
-        _register_extra_model(model_name)
-
-    # Inject API keys before get_model — OpenAI plugin checks env var immediately
-    if "mimo" in model_name.lower():
-        mimo_key = os.environ.get("MIMO_API_KEY")
-        if mimo_key and not os.environ.get("OPENAI_API_KEY"):
-            os.environ["OPENAI_API_KEY"] = mimo_key
-
-    model = llm.get_model(model_name)
-
-    if "gemini" in model_name.lower():
-        api_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
-        if api_key:
-            model.key = api_key
-    if "mimo" in model_name.lower():
-        api_key = os.environ.get("MIMO_API_KEY")
-        if api_key:
-            model.key = api_key
-    if base_url:
-        model.api_base = base_url
-
-    return model
-
-
-class Beaurocrat:
+class Bureaucrat:
     """Validates regulations against the current state of the codebase."""
 
     def __init__(

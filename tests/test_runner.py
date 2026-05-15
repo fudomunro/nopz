@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from nopz.beaurocrat import Beaurocrat
+from nopz.bureaucrat import Bureaucrat
 from nopz.clerk import Clerk
 from nopz.regulations import Regulation, RegulationResult
 from nopz.runner import Runner, _is_transient_error
@@ -26,20 +26,20 @@ def _make_clerk(summary: str = "Clerk completed work.", usage: dict | None = Non
     return clerk
 
 
-def _make_beaurocrat(results: list[RegulationResult]) -> MagicMock:
-    """Create a mock Beaurocrat with fixed validation results."""
-    beaurocrat = MagicMock(spec=Beaurocrat)
-    beaurocrat.validate_all.return_value = results
-    beaurocrat.all_passed.return_value = all(r.passed for r in results)
-    beaurocrat.failures.return_value = [r for r in results if not r.passed]
-    return beaurocrat
+def _make_bureaucrat(results: list[RegulationResult]) -> MagicMock:
+    """Create a mock Bureaucrat with fixed validation results."""
+    bureaucrat = MagicMock(spec=Bureaucrat)
+    bureaucrat.validate_all.return_value = results
+    bureaucrat.all_passed.return_value = all(r.passed for r in results)
+    bureaucrat.failures.return_value = [r for r in results if not r.passed]
+    return bureaucrat
 
 
 @patch("nopz.runner._git")
 def test_empty_regulations_returns_true(mock_git: MagicMock):
     runner = Runner(
         clerk=_make_clerk(),
-        beaurocrat=_make_beaurocrat([]),
+        bureaucrat=_make_bureaucrat([]),
         regulations=[],
         use_git=False,
     )
@@ -55,7 +55,7 @@ def test_all_pass_returns_true(mock_git: MagicMock):
     ]
     runner = Runner(
         clerk=_make_clerk(),
-        beaurocrat=_make_beaurocrat(results),
+        bureaucrat=_make_bureaucrat(results),
         regulations=regs,
         max_iterations=5,
         use_git=False,
@@ -68,11 +68,11 @@ def test_max_iterations_returns_false(mock_git: MagicMock):
     regs = [_make_regulation("reg_a")]
     fail_result = RegulationResult(passed=False, name="reg_a", message="not met")
     clerk = _make_clerk()
-    beaurocrat = _make_beaurocrat([fail_result])
+    bureaucrat = _make_bureaucrat([fail_result])
 
     runner = Runner(
         clerk=clerk,
-        beaurocrat=beaurocrat,
+        bureaucrat=bureaucrat,
         regulations=regs,
         max_iterations=3,
         use_git=False,
@@ -94,17 +94,17 @@ def test_chain_limit_error_is_recoverable(mock_git: MagicMock):
         ("Clerk error: Chain limit of 30 exceeded.", {"input": 0, "output": 0}),
         ("Clerk completed work.", {"input": 10, "output": 5}),
     ]
-    beaurocrat = MagicMock(spec=Beaurocrat)
-    beaurocrat.validate_all.side_effect = [
+    bureaucrat = MagicMock(spec=Bureaucrat)
+    bureaucrat.validate_all.side_effect = [
         [fail_result],  # validation after chain limit error
         [pass_result],  # validation after successful clerk work
     ]
-    beaurocrat.all_passed.side_effect = [False, True]
-    beaurocrat.failures.return_value = [fail_result]
+    bureaucrat.all_passed.side_effect = [False, True]
+    bureaucrat.failures.return_value = [fail_result]
 
     runner = Runner(
         clerk=clerk,
-        beaurocrat=beaurocrat,
+        bureaucrat=bureaucrat,
         regulations=regs,
         max_iterations=5,
         use_git=False,
@@ -118,11 +118,11 @@ def test_chain_limit_error_is_recoverable(mock_git: MagicMock):
 def test_non_chain_limit_clerk_error_aborts(mock_git: MagicMock):
     regs = [_make_regulation("reg_a")]
     clerk = _make_clerk(summary="Clerk error: Model 'bad-model' not found.")
-    beaurocrat = _make_beaurocrat([])
+    bureaucrat = _make_bureaucrat([])
 
     runner = Runner(
         clerk=clerk,
-        beaurocrat=beaurocrat,
+        bureaucrat=bureaucrat,
         regulations=regs,
         max_iterations=5,
         use_git=False,
@@ -130,8 +130,8 @@ def test_non_chain_limit_clerk_error_aborts(mock_git: MagicMock):
     assert runner.run() is False
     # Only called once — aborted immediately
     assert clerk.work.call_count == 1
-    # Beaurocrat never validated
-    beaurocrat.validate_all.assert_not_called()
+    # Bureaucrat never validated
+    bureaucrat.validate_all.assert_not_called()
 
 
 def test_is_transient_error_matches_patterns():
@@ -158,17 +158,17 @@ def test_transient_api_error_is_recoverable(mock_git: MagicMock):
         ("Clerk error: 400 - Connection prematurely closed BEFORE response", {"input": 0, "output": 0}),
         ("Clerk completed work.", {"input": 10, "output": 5}),
     ]
-    beaurocrat = MagicMock(spec=Beaurocrat)
-    beaurocrat.validate_all.side_effect = [
+    bureaucrat = MagicMock(spec=Bureaucrat)
+    bureaucrat.validate_all.side_effect = [
         [fail_result],  # validation after transient error
         [pass_result],  # validation after successful retry
     ]
-    beaurocrat.all_passed.side_effect = [False, True]
-    beaurocrat.failures.return_value = [fail_result]
+    bureaucrat.all_passed.side_effect = [False, True]
+    bureaucrat.failures.return_value = [fail_result]
 
     runner = Runner(
         clerk=clerk,
-        beaurocrat=beaurocrat,
+        bureaucrat=bureaucrat,
         regulations=regs,
         max_iterations=5,
         use_git=False,
@@ -183,18 +183,18 @@ def test_non_transient_clerk_error_still_aborts(mock_git: MagicMock):
     regs = [_make_regulation("reg_a")]
     clerk = MagicMock(spec=Clerk)
     clerk.work.return_value = ("Clerk error: Model 'bad-model' not found.", {"input": 0, "output": 0})
-    beaurocrat = _make_beaurocrat([])
+    bureaucrat = _make_bureaucrat([])
 
     runner = Runner(
         clerk=clerk,
-        beaurocrat=beaurocrat,
+        bureaucrat=bureaucrat,
         regulations=regs,
         max_iterations=5,
         use_git=False,
     )
     assert runner.run() is False
     assert clerk.work.call_count == 1
-    beaurocrat.validate_all.assert_not_called()
+    bureaucrat.validate_all.assert_not_called()
 
 
 @patch("nopz.runner._git")
@@ -207,16 +207,16 @@ def test_stuck_detection_aborts_on_same_failures(mock_git: MagicMock):
 
     clerk = MagicMock(spec=Clerk)
     clerk.work.return_value = ("Clerk completed work.", {"input": 10, "output": 5})
-    beaurocrat = MagicMock(spec=Beaurocrat)
+    bureaucrat = MagicMock(spec=Bureaucrat)
     # Iteration 1: both fail, iteration 2: both fail again → stuck
     fail_results = [fail_a, fail_b]
-    beaurocrat.validate_all.side_effect = [fail_results, fail_results]
-    beaurocrat.all_passed.return_value = False
-    beaurocrat.failures.return_value = [fail_a, fail_b]
+    bureaucrat.validate_all.side_effect = [fail_results, fail_results]
+    bureaucrat.all_passed.return_value = False
+    bureaucrat.failures.return_value = [fail_a, fail_b]
 
     runner = Runner(
         clerk=clerk,
-        beaurocrat=beaurocrat,
+        bureaucrat=bureaucrat,
         regulations=regs,
         max_iterations=10,
         use_git=False,
@@ -236,17 +236,17 @@ def test_stuck_detection_resets_when_failures_change(mock_git: MagicMock):
 
     clerk = MagicMock(spec=Clerk)
     clerk.work.return_value = ("Clerk completed work.", {"input": 10, "output": 5})
-    beaurocrat = MagicMock(spec=Beaurocrat)
+    bureaucrat = MagicMock(spec=Bureaucrat)
     # Iteration 1: {a} fails, iteration 2: {b} fails, iteration 3: {a} fails,
     # iteration 4: {b} fails — alternating, never stuck
-    beaurocrat.validate_all.side_effect = [
+    bureaucrat.validate_all.side_effect = [
         [fail_a],
         [fail_b],
         [fail_a],
         [fail_b],
     ]
-    beaurocrat.all_passed.return_value = False
-    beaurocrat.failures.side_effect = [
+    bureaucrat.all_passed.return_value = False
+    bureaucrat.failures.side_effect = [
         [fail_a],
         [fail_b],
         [fail_a],
@@ -255,7 +255,7 @@ def test_stuck_detection_resets_when_failures_change(mock_git: MagicMock):
 
     runner = Runner(
         clerk=clerk,
-        beaurocrat=beaurocrat,
+        bureaucrat=bureaucrat,
         regulations=regs,
         max_iterations=4,
         use_git=False,
@@ -274,14 +274,14 @@ def test_stuck_limit_1_aborts_immediately(mock_git: MagicMock):
 
     clerk = MagicMock(spec=Clerk)
     clerk.work.return_value = ("Clerk completed work.", {"input": 10, "output": 5})
-    beaurocrat = MagicMock(spec=Beaurocrat)
-    beaurocrat.validate_all.return_value = [fail_a]
-    beaurocrat.all_passed.return_value = False
-    beaurocrat.failures.return_value = [fail_a]
+    bureaucrat = MagicMock(spec=Bureaucrat)
+    bureaucrat.validate_all.return_value = [fail_a]
+    bureaucrat.all_passed.return_value = False
+    bureaucrat.failures.return_value = [fail_a]
 
     runner = Runner(
         clerk=clerk,
-        beaurocrat=beaurocrat,
+        bureaucrat=bureaucrat,
         regulations=regs,
         max_iterations=10,
         use_git=False,
@@ -302,13 +302,13 @@ def test_exception_during_iteration_continues(mock_git: MagicMock):
         RuntimeError("transient error"),
         ("Clerk completed work.", {"input": 10, "output": 5}),
     ]
-    beaurocrat = MagicMock(spec=Beaurocrat)
-    beaurocrat.validate_all.return_value = [pass_result]
-    beaurocrat.all_passed.return_value = True
+    bureaucrat = MagicMock(spec=Bureaucrat)
+    bureaucrat.validate_all.return_value = [pass_result]
+    bureaucrat.all_passed.return_value = True
 
     runner = Runner(
         clerk=clerk,
-        beaurocrat=beaurocrat,
+        bureaucrat=bureaucrat,
         regulations=regs,
         max_iterations=5,
         use_git=False,
@@ -329,17 +329,17 @@ def test_failure_context_passed_to_clerk(mock_git: MagicMock):
         ("Clerk completed work.", {"input": 10, "output": 5}),
         ("Clerk completed work.", {"input": 10, "output": 5}),
     ]
-    beaurocrat = MagicMock(spec=Beaurocrat)
-    beaurocrat.validate_all.side_effect = [
+    bureaucrat = MagicMock(spec=Bureaucrat)
+    bureaucrat.validate_all.side_effect = [
         [fail_a],
         [pass_a],
     ]
-    beaurocrat.all_passed.side_effect = [False, True]
-    beaurocrat.failures.return_value = [fail_a]
+    bureaucrat.all_passed.side_effect = [False, True]
+    bureaucrat.failures.return_value = [fail_a]
 
     runner = Runner(
         clerk=clerk,
-        beaurocrat=beaurocrat,
+        bureaucrat=bureaucrat,
         regulations=regs,
         max_iterations=5,
         use_git=False,
@@ -366,17 +366,17 @@ def test_usage_accumulated(mock_git: MagicMock):
         ("Clerk completed work.", {"input": 100, "output": 50}),
         ("Clerk completed work.", {"input": 200, "output": 75}),
     ]
-    beaurocrat = MagicMock(spec=Beaurocrat)
-    beaurocrat.validate_all.side_effect = [
+    bureaucrat = MagicMock(spec=Bureaucrat)
+    bureaucrat.validate_all.side_effect = [
         [RegulationResult(passed=False, name="reg_a", message="nope")],
         [pass_a],
     ]
-    beaurocrat.all_passed.side_effect = [False, True]
-    beaurocrat.failures.return_value = [RegulationResult(passed=False, name="reg_a")]
+    bureaucrat.all_passed.side_effect = [False, True]
+    bureaucrat.failures.return_value = [RegulationResult(passed=False, name="reg_a")]
 
     runner = Runner(
         clerk=clerk,
-        beaurocrat=beaurocrat,
+        bureaucrat=bureaucrat,
         regulations=regs,
         max_iterations=5,
         use_git=False,
@@ -397,13 +397,13 @@ def test_git_mode_commits_changes(mock_subprocess: MagicMock, mock_git: MagicMoc
 
     clerk = MagicMock(spec=Clerk)
     clerk.work.return_value = ("Clerk completed work.", {"input": 10, "output": 5})
-    beaurocrat = MagicMock(spec=Beaurocrat)
-    beaurocrat.validate_all.return_value = [pass_a]
-    beaurocrat.all_passed.return_value = True
+    bureaucrat = MagicMock(spec=Bureaucrat)
+    bureaucrat.validate_all.return_value = [pass_a]
+    bureaucrat.all_passed.return_value = True
 
     runner = Runner(
         clerk=clerk,
-        beaurocrat=beaurocrat,
+        bureaucrat=bureaucrat,
         regulations=regs,
         max_iterations=5,
         use_git=True,
@@ -427,13 +427,13 @@ def test_git_mode_no_changes(mock_subprocess: MagicMock, mock_git: MagicMock):
 
     clerk = MagicMock(spec=Clerk)
     clerk.work.return_value = ("Clerk completed work.", {"input": 10, "output": 5})
-    beaurocrat = MagicMock(spec=Beaurocrat)
-    beaurocrat.validate_all.return_value = [pass_a]
-    beaurocrat.all_passed.return_value = True
+    bureaucrat = MagicMock(spec=Bureaucrat)
+    bureaucrat.validate_all.return_value = [pass_a]
+    bureaucrat.all_passed.return_value = True
 
     runner = Runner(
         clerk=clerk,
-        beaurocrat=beaurocrat,
+        bureaucrat=bureaucrat,
         regulations=regs,
         max_iterations=5,
         use_git=True,
@@ -453,13 +453,13 @@ def test_git_branch_fallback_to_main(mock_git: MagicMock):
 
     clerk = MagicMock(spec=Clerk)
     clerk.work.return_value = ("Clerk completed work.", {"input": 10, "output": 5})
-    beaurocrat = MagicMock(spec=Beaurocrat)
-    beaurocrat.validate_all.return_value = [pass_a]
-    beaurocrat.all_passed.return_value = True
+    bureaucrat = MagicMock(spec=Bureaucrat)
+    bureaucrat.validate_all.return_value = [pass_a]
+    bureaucrat.all_passed.return_value = True
 
     runner = Runner(
         clerk=clerk,
-        beaurocrat=beaurocrat,
+        bureaucrat=bureaucrat,
         regulations=regs,
         max_iterations=5,
         use_git=True,
@@ -475,13 +475,13 @@ def test_shadow_pyproject_created_and_cleaned_up(mock_git: MagicMock, tmp_path):
 
     clerk = MagicMock(spec=Clerk)
     clerk.work.return_value = ("Clerk completed work.", {"input": 10, "output": 5})
-    beaurocrat = MagicMock(spec=Beaurocrat)
-    beaurocrat.validate_all.return_value = [pass_a]
-    beaurocrat.all_passed.return_value = True
+    bureaucrat = MagicMock(spec=Bureaucrat)
+    bureaucrat.validate_all.return_value = [pass_a]
+    bureaucrat.all_passed.return_value = True
 
     runner = Runner(
         clerk=clerk,
-        beaurocrat=beaurocrat,
+        bureaucrat=bureaucrat,
         regulations=regs,
         max_iterations=5,
         use_git=False,
@@ -506,13 +506,13 @@ def test_shadow_pyproject_not_overwritten(mock_git: MagicMock, tmp_path):
 
     clerk = MagicMock(spec=Clerk)
     clerk.work.return_value = ("Clerk completed work.", {"input": 10, "output": 5})
-    beaurocrat = MagicMock(spec=Beaurocrat)
-    beaurocrat.validate_all.return_value = [pass_a]
-    beaurocrat.all_passed.return_value = True
+    bureaucrat = MagicMock(spec=Bureaucrat)
+    bureaucrat.validate_all.return_value = [pass_a]
+    bureaucrat.all_passed.return_value = True
 
     runner = Runner(
         clerk=clerk,
-        beaurocrat=beaurocrat,
+        bureaucrat=bureaucrat,
         regulations=regs,
         max_iterations=5,
         use_git=False,

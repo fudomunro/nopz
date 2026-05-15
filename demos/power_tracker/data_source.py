@@ -24,7 +24,7 @@ def _parse_all() -> list[ast.Module]:
         try:
             with open(fpath) as f:
                 trees.append(ast.parse(f.read()))
-        except SyntaxError:
+        except (SyntaxError, OSError, UnicodeDecodeError):
             pass
     return trees
 
@@ -46,15 +46,19 @@ def _import_names(tree: ast.Module) -> set[str]:
 
 @regulation(
     "seeds_10_people",
-    description="Data source seeds exactly 10 profiles of the most powerful people.",
+    description=(
+        "Data source must seed exactly 10 person profiles. Each profile must "
+        "be a dict or constructor call with at least one key matching a person "
+        "field name (name, title, id, power_rank, or country). "
+        "Scope: non-test Python source files. Missing or unparseable files "
+        "are skipped."
+    ),
 )
 def seeds_10_people():
     person_keys = {"name", "title", "id", "power_rank", "country"}
     for tree in _parse_all():
         for node in ast.walk(tree):
-            # Look for a list literal with exactly 10 elements
             if isinstance(node, ast.List) and len(node.elts) == 10:
-                # Check if elements look person-like (dicts or constructor calls)
                 for elt in node.elts:
                     if isinstance(elt, ast.Dict):
                         keys = [k.value for k in elt.keys if isinstance(k, ast.Constant)]
@@ -69,7 +73,12 @@ def seeds_10_people():
 
 @regulation(
     "thread_safe_storage",
-    description="Data store must be thread-safe or concurrency-safe.",
+    description=(
+        "Data store must protect shared state from concurrent access. "
+        "The check passes if the code imports threading, asyncio, Lock, "
+        "RLock, Semaphore, or Queue. Scope: non-test Python source files. "
+        "Missing or unparseable files are skipped."
+    ),
 )
 def thread_safe_storage():
     safe_imports = {"threading", "asyncio", "Lock", "RLock", "Semaphore", "Queue"}
@@ -82,7 +91,13 @@ def thread_safe_storage():
 
 @regulation(
     "activity_generator",
-    description="Background routine generates Activity events at random intervals (2-8 seconds).",
+    description=(
+        "A background routine must continuously generate Activity events "
+        "in a loop with a sleep delay between iterations. The check passes "
+        "if a function contains both a while-loop and a sleep() call. "
+        "Scope: non-test Python source files. Missing or unparseable files "
+        "are skipped."
+    ),
 )
 def activity_generator():
     for tree in _parse_all():
@@ -105,14 +120,17 @@ def activity_generator():
 
 @regulation(
     "activity_references_valid_person",
-    description="Generated activities must reference valid person_ids.",
+    description=(
+        "Generated activities must reference valid person_ids that exist "
+        "in the data store. Scope: non-test Python source files. Missing "
+        "or unparseable files are skipped."
+    ),
 )
 def activity_references_valid_person():
     for tree in _parse_all():
         for node in ast.walk(tree):
             if isinstance(node, ast.Call):
                 func = node.func
-                # random.choice(...) or random.choice([...])
                 if isinstance(func, ast.Attribute) and func.attr == "choice":
                     if isinstance(func.value, ast.Attribute) and func.value.attr == "random":
                         return RegulationResult(passed=True, name="activity_references_valid_person", message="Activities reference valid persons")
@@ -123,20 +141,23 @@ def activity_references_valid_person():
 
 @regulation(
     "activity_capped_at_100",
-    description="Data store caps activity history at 100 entries.",
+    description=(
+        "Data store must cap activity history at a maximum of 100 entries. "
+        "The check passes if the code compares against the literal 100 or "
+        "a named constant combining 'max'/'cap'/'limit' with 'activit', "
+        "or slices with upper bound 100. Scope: non-test Python source "
+        "files. Missing or unparseable files are skipped."
+    ),
 )
 def activity_capped_at_100():
     for tree in _parse_all():
         for node in ast.walk(tree):
-            # Check for comparisons with 100 (e.g. len(activities) > 100, if len >= 100)
             if isinstance(node, ast.Compare):
                 for comp_node in [node.left] + node.comparators:
                     if isinstance(comp_node, ast.Constant) and comp_node.value == 100:
                         return RegulationResult(passed=True, name="activity_capped_at_100", message="Activity cap at 100 found")
-                    # Also match a variable name implying a cap (e.g. MAX_ACTIVITIES)
                     if isinstance(comp_node, ast.Name) and _is_cap_variable(comp_node.id):
                         return RegulationResult(passed=True, name="activity_capped_at_100", message="Activity cap at 100 found")
-            # Check for slicing with 100 (e.g. activities[-100:])
             if isinstance(node, ast.Slice):
                 if isinstance(node.upper, ast.Constant) and node.upper.value == 100:
                     return RegulationResult(passed=True, name="activity_capped_at_100", message="Activity cap at 100 found")
