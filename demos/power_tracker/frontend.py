@@ -130,8 +130,9 @@ def fetches_people():
     "sse_connection",
     description=(
         "Frontend must establish a real-time connection to the backend using "
-        "a streaming mechanism such as SSE or WebSocket. Scope: all .js and "
-        ".html files excluding directories __pycache__, runs, .git, "
+        "SSE or WebSocket. The check passes if any .js or .html file "
+        "contains 'EventSource', 'WebSocket', or 'sse'. Scope: all .js "
+        "and .html files excluding directories __pycache__, runs, .git, "
         "node_modules, and .venv. Missing or unreadable files are skipped."
     ),
 )
@@ -147,7 +148,9 @@ def sse_connection():
     "reconnect_handling",
     description=(
         "Frontend must detect disconnections and automatically retry the "
-        "connection. Scope: all .js and .html files excluding directories "
+        "connection. The check passes if any .js or .html file contains "
+        "'reconnect' or 'retry' AND contains 'error' with 'close' or "
+        "'disconnect'. Scope: all .js and .html files excluding directories "
         "__pycache__, runs, .git, node_modules, and .venv. Missing or "
         "unreadable files are skipped."
     ),

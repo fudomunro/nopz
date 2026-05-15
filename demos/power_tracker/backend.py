@@ -103,8 +103,9 @@ def fastapi_framework():
     "cors_middleware",
     description=(
         "Backend must allow cross-origin HTTP requests from any origin. "
-        "Scope: non-test Python source files. Missing or unparseable files "
-        "are skipped."
+        "The check passes if any Python file imports CORSMiddleware or "
+        "calls add_middleware() with CORSMiddleware. Scope: non-test Python "
+        "source files. Missing or unparseable files are skipped."
     ),
 )
 def cors_middleware():
