@@ -11,9 +11,10 @@ from nopz.number_one import (
     ReviewResult,
     _build_review_prompt,
     _parse_review_response,
+    _regulation_cache_key,
     load_guidelines,
 )
-from nopz.regulations import Regulation
+from nopz.regulations import Regulation, RegulationResult
 
 
 # --- load_guidelines ---
@@ -51,10 +52,13 @@ def test_load_guidelines_missing_file():
 
 
 def _make_regulation(name="test_reg", description="desc", llm_validate=None):
+    def check():
+        return RegulationResult(passed=True, name=name)
     reg = MagicMock(spec=Regulation)
     reg.name = name
     reg.description = description
     reg.llm_validate = llm_validate
+    reg.check = check
     return reg
 
 
@@ -233,3 +237,122 @@ def test_number_one_failures():
     failures = no.failures(results)
     assert len(failures) == 2
     assert [f.regulation_name for f in failures] == ["b", "c"]
+
+
+# --- Review cache ---
+
+
+def _make_real_regulation(name="test_reg", description="desc"):
+    """Create a real Regulation with a check function (needed for inspect.getsource)."""
+    def check():
+        return RegulationResult(passed=True, name=name)
+    return Regulation(name=name, description=description, check=check)
+
+
+def test_cache_key_stable():
+    """Same regulation + guidelines produce the same cache key."""
+    reg = _make_real_regulation()
+    guidelines = [ReviewGuideline(id="g1", name="G1", description="test")]
+    key1 = _regulation_cache_key(reg, guidelines)
+    key2 = _regulation_cache_key(reg, guidelines)
+    assert key1 == key2
+
+
+def test_cache_key_changes_on_name():
+    reg_a = _make_real_regulation(name="a")
+    reg_b = _make_real_regulation(name="b")
+    guidelines = [ReviewGuideline(id="g1", name="G1", description="test")]
+    assert _regulation_cache_key(reg_a, guidelines) != _regulation_cache_key(reg_b, guidelines)
+
+
+def test_cache_key_changes_on_description():
+    reg_a = _make_real_regulation(description="desc A")
+    reg_b = _make_real_regulation(description="desc B")
+    guidelines = [ReviewGuideline(id="g1", name="G1", description="test")]
+    assert _regulation_cache_key(reg_a, guidelines) != _regulation_cache_key(reg_b, guidelines)
+
+
+def test_cache_key_changes_on_guidelines():
+    reg = _make_real_regulation()
+    gl_a = [ReviewGuideline(id="g1", name="G1", description="alpha")]
+    gl_b = [ReviewGuideline(id="g1", name="G1", description="beta")]
+    assert _regulation_cache_key(reg, gl_a) != _regulation_cache_key(reg, gl_b)
+
+
+def test_cache_hit_skips_llm(tmp_path):
+    """On cache hit, the LLM should not be called."""
+    guidelines = [ReviewGuideline(id="g1", name="G1", description="test")]
+    reg = _make_real_regulation()
+
+    mock_model = MagicMock()
+    mock_response = MagicMock()
+    mock_response.text.return_value = '{"passed": true, "issues": []}'
+    mock_model.prompt.return_value = mock_response
+
+    cache_dir = str(tmp_path / "cache")
+
+    # First run — LLM called, result cached
+    no = NumberOne(guidelines=guidelines, model_name="test", cache_dir=cache_dir)
+    with patch("nopz.number_one._setup_model", return_value=mock_model):
+        results = no.review([reg])
+    assert results[0].passed is True
+    assert mock_model.prompt.call_count == 1
+
+    # Second run — cache hit, LLM not called
+    no2 = NumberOne(guidelines=guidelines, model_name="test", cache_dir=cache_dir)
+    with patch("nopz.number_one._setup_model", return_value=mock_model):
+        results2 = no2.review([reg])
+    assert results2[0].passed is True
+    assert mock_model.prompt.call_count == 1  # still 1, not 2
+
+
+def test_cache_miss_after_change(tmp_path):
+    """When the regulation changes, the cache misses and the LLM is called again."""
+    guidelines = [ReviewGuideline(id="g1", name="G1", description="test")]
+
+    def check_v1():
+        return RegulationResult(passed=True, name="reg")
+
+    reg_v1 = Regulation(name="reg", description="v1", check=check_v1)
+
+    mock_model = MagicMock()
+    mock_response = MagicMock()
+    mock_response.text.return_value = '{"passed": true, "issues": []}'
+    mock_model.prompt.return_value = mock_response
+
+    cache_dir = str(tmp_path / "cache")
+
+    # First run
+    no = NumberOne(guidelines=guidelines, model_name="test", cache_dir=cache_dir)
+    with patch("nopz.number_one._setup_model", return_value=mock_model):
+        no.review([reg_v1])
+    assert mock_model.prompt.call_count == 1
+
+    # New regulation with different description
+    def check_v2():
+        return RegulationResult(passed=True, name="reg")
+
+    reg_v2 = Regulation(name="reg", description="v2", check=check_v2)
+
+    no2 = NumberOne(guidelines=guidelines, model_name="test", cache_dir=cache_dir)
+    with patch("nopz.number_one._setup_model", return_value=mock_model):
+        no2.review([reg_v2])
+    assert mock_model.prompt.call_count == 2  # cache miss, LLM called again
+
+
+def test_no_cache_when_cache_dir_none():
+    """When cache_dir is None, no caching occurs."""
+    guidelines = [ReviewGuideline(id="g1", name="G1", description="test")]
+    reg = _make_real_regulation()
+
+    mock_model = MagicMock()
+    mock_response = MagicMock()
+    mock_response.text.return_value = '{"passed": true, "issues": []}'
+    mock_model.prompt.return_value = mock_response
+
+    # Two runs with no cache_dir
+    no = NumberOne(guidelines=guidelines, model_name="test", cache_dir=None)
+    with patch("nopz.number_one._setup_model", return_value=mock_model):
+        no.review([reg])
+        no.review([reg])
+    assert mock_model.prompt.call_count == 2  # LLM called both times

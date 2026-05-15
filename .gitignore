@@ -70,3 +70,4 @@ venv.bak/
 temp
 MagicMock/
 demos/*/runs
+.nopz/

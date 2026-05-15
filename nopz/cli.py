@@ -1,6 +1,6 @@
 """NOPZ CLI — entry point for the NOPZ tool.
 
-Loads regulations from a Python file and runs the clerk/beaurocrat loop.
+Loads regulations from a Python file and runs the clerk/bureaucrat loop.
 """
 
 import argparse
@@ -10,7 +10,7 @@ import os
 import sys
 from pathlib import Path
 
-from nopz.beaurocrat import Beaurocrat
+from nopz.bureaucrat import Bureaucrat
 from nopz.clerk import Clerk
 from nopz.llm_compat import patch_reasoning_content
 from nopz.number_one import NumberOne, load_guidelines
@@ -66,10 +66,10 @@ def main():
         help="Model for the clerk (default: gemini-2.5-pro).",
     )
     parser.add_argument(
-        "--beaurocrat-model",
+        "--bureaucrat-model",
         type=str,
         default="gemini-2.5-pro",
-        help="Model for the beaurocrat (default: gemini-2.5-pro).",
+        help="Model for the bureaucrat (default: gemini-2.5-pro).",
     )
     parser.add_argument(
         "--clerk-turns",
@@ -81,7 +81,7 @@ def main():
         "--max-iterations",
         type=int,
         default=10,
-        help="Maximum clerk/beaurocrat iterations (default: 10).",
+        help="Maximum clerk/bureaucrat iterations (default: 10).",
     )
     parser.add_argument(
         "--stuck-limit",
@@ -125,7 +125,7 @@ def main():
         "--nopz-model",
         type=str,
         default=None,
-        help="Model for regulation review (default: same as --beaurocrat-model).",
+        help="Model for regulation review (default: same as --bureaucrat-model).",
     )
     parser.add_argument(
         "--guidelines",
@@ -137,6 +137,11 @@ def main():
         "--skip-review",
         action="store_true",
         help="Skip the Number One Point Zero regulation review step.",
+    )
+    parser.add_argument(
+        "--no-review-cache",
+        action="store_true",
+        help="Disable caching of Number One regulation review results.",
     )
 
     args = parser.parse_args()
@@ -179,17 +184,19 @@ def main():
 
     # --- Number One Point Zero: regulation review ---
     if not args.skip_review:
-        nopz_model = args.nopz_model or args.beaurocrat_model
+        nopz_model = args.nopz_model or args.bureaucrat_model
         try:
             guidelines = load_guidelines(args.guidelines)
         except FileNotFoundError as e:
             logging.error(str(e))
             sys.exit(1)
 
+        cache_dir = None if args.no_review_cache else ".nopz"
         number_one = NumberOne(
             guidelines=guidelines,
             model_name=nopz_model,
             base_url=args.mimo_server,
+            cache_dir=cache_dir,
         )
         logging.info("Number One Point Zero: reviewing regulations...")
         review_results = number_one.review(regulations)
@@ -206,7 +213,7 @@ def main():
 
         logging.info("Number One Point Zero: all regulations approved.")
 
-    # Chdir to output directory so clerk/beaurocrat work there directly
+    # Chdir to output directory so clerk/bureaucrat work there directly
     if args.output:
         os.chdir(args.output)
 
@@ -216,14 +223,14 @@ def main():
         base_url=args.mimo_server,
         turns=args.clerk_turns,
     )
-    beaurocrat = Beaurocrat(
+    bureaucrat = Bureaucrat(
         regulations=regulations,
-        llm_model=args.beaurocrat_model,
+        llm_model=args.bureaucrat_model,
         base_url=args.mimo_server,
     )
     runner = Runner(
         clerk=clerk,
-        beaurocrat=beaurocrat,
+        bureaucrat=bureaucrat,
         regulations=regulations,
         max_iterations=args.max_iterations,
         use_git=not args.no_git,

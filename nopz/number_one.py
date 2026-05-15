@@ -1,12 +1,14 @@
-"""Number One Point Zero — the supreme Beaurocrat that reviews regulations.
+"""Number One Point Zero — the supreme Bureaucrat that reviews regulations.
 
-Before the clerk/beaurocrat loop begins, Number One evaluates each regulation
+Before the clerk/bureaucrat loop begins, Number One evaluates each regulation
 against a set of guidelines to catch brittle, ambiguous, or poorly specified
 regulations early.
 """
 
 from __future__ import annotations
 
+import hashlib
+import inspect
 import json
 import logging
 import re
@@ -147,6 +149,43 @@ def _parse_review_response(response_text: str) -> tuple[bool, list[str]]:
         return False, [f"Could not parse review response: {response_text[:200]}"]
 
 
+def _regulation_cache_key(
+    regulation: Regulation, guidelines: list[ReviewGuideline]
+) -> str:
+    """Compute a stable cache key from a regulation's definition and guidelines."""
+    hasher = hashlib.sha256()
+    hasher.update(regulation.name.encode())
+    hasher.update(regulation.description.encode())
+    try:
+        hasher.update(inspect.getsource(regulation.check).encode())
+    except (OSError, TypeError):
+        # getsource can fail for builtins/C functions — fall back to repr
+        hasher.update(repr(regulation.check).encode())
+    for g in guidelines:
+        hasher.update(g.id.encode())
+        hasher.update(g.name.encode())
+        hasher.update(g.description.encode())
+    return hasher.hexdigest()
+
+
+def _load_cache(cache_path: Path) -> dict:
+    """Load the review cache from disk."""
+    if not cache_path.exists():
+        return {}
+    try:
+        with open(cache_path) as f:
+            return json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+
+def _save_cache(cache_path: Path, cache: dict) -> None:
+    """Save the review cache to disk."""
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(cache_path, "w") as f:
+        json.dump(cache, f, indent=2)
+
+
 class NumberOne:
     """Reviews regulations against guidelines before the run begins."""
 
@@ -155,10 +194,12 @@ class NumberOne:
         guidelines: list[ReviewGuideline],
         model_name: str,
         base_url: Optional[str] = None,
+        cache_dir: Optional[str] = None,
     ):
         self.guidelines = guidelines
         self.model_name = model_name
         self.base_url = base_url
+        self.cache_path = Path(cache_dir).joinpath("review_cache.json") if cache_dir else None
 
     def review(self, regulations: list[Regulation]) -> list[ReviewResult]:
         """Review all regulations against the guidelines.
@@ -172,7 +213,24 @@ class NumberOne:
         results = []
         model = _setup_model(self.model_name, self.base_url)
 
+        cache = _load_cache(self.cache_path) if self.cache_path else {}
+        cache_dirty = False
+
         for reg in regulations:
+            cache_key = _regulation_cache_key(reg, self.guidelines)
+
+            if cache_key in cache:
+                cached = cache[cache_key]
+                result = ReviewResult(
+                    passed=cached["passed"],
+                    regulation_name=cached["regulation_name"],
+                    issues=cached.get("issues", []),
+                )
+                results.append(result)
+                status = "PASS" if result.passed else "FAIL"
+                logger.info(f"Reviewing regulation: {reg.name} (cached) — {status}")
+                continue
+
             logger.info(f"Reviewing regulation: {reg.name}")
             prompt = _build_review_prompt(reg, self.guidelines)
 
@@ -192,11 +250,21 @@ class NumberOne:
             )
             results.append(result)
 
+            cache[cache_key] = {
+                "passed": result.passed,
+                "regulation_name": result.regulation_name,
+                "issues": result.issues,
+            }
+            cache_dirty = True
+
             status = "PASS" if passed else "FAIL"
             logger.info(f"  {reg.name}: {status}")
             if not passed:
                 for issue in issues:
                     logger.warning(f"    - {issue}")
+
+        if self.cache_path and cache_dirty:
+            _save_cache(self.cache_path, cache)
 
         return results
 

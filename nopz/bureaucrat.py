@@ -1,6 +1,6 @@
-"""Beaurocrat — runs regulations against the current state.
+"""Bureaucrat — runs regulations against the current state.
 
-The beaurocrat is the "senior bureaucrat" that validates whether
+The bureaucrat is the "senior bureaucrat" that validates whether
 a codebase satisfies all regulations. It runs deterministic checks
 and optionally uses LLM-based validation for subjective regulations.
 """
@@ -14,7 +14,7 @@ from nopz.regulations import Regulation, RegulationResult
 logger = logging.getLogger(__name__)
 
 
-class Beaurocrat:
+class Bureaucrat:
     """Validates regulations against the current state of the codebase."""
 
     def __init__(

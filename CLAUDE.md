@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**NOPZ** (Number One Point Zero) is a Python CLI tool that enforces regulations on a codebase using a two-agent system: a **Clerk** (makes changes) and a **Beaurocrat** (validates). The loop repeats until all regulations pass or the iteration limit is reached. It uses Simon Willison's `llm` library as an abstraction layer, defaulting to Google Gemini models.
+**NOPZ** (Number One Point Zero) is a Python CLI tool that enforces regulations on a codebase using a two-agent system: a **Clerk** (makes changes) and a **Bureaucrat** (validates). The loop repeats until all regulations pass or the iteration limit is reached. It uses Simon Willison's `llm` library as an abstraction layer, defaulting to Google Gemini models.
 
 > *"You are technically correct, the BEST kind of correct."* – Number 1.0, Futurama
 
@@ -29,9 +29,9 @@ nopz/
 ├── nopz/                   # Main package
 │   ├── __init__.py         # Version (0.1.0)
 │   ├── cli.py              # Entry point: argparse CLI, regulation loading
-│   ├── runner.py           # Orchestrates the clerk/beaurocrat loop
+│   ├── runner.py           # Orchestrates the clerk/bureaucrat loop
 │   ├── clerk.py            # LLM agent that makes changes to satisfy regulations
-│   ├── beaurocrat.py       # Validates regulations against current state
+│   ├── bureaucrat.py       # Validates regulations against current state
 │   ├── agent.py            # Tool definitions (read/write/exec), model registration
 │   ├── regulations.py      # Regulation dataclass, @regulation decorator, global registry
 │   ├── llm_compat.py       # Patches for llm library compatibility
@@ -40,7 +40,7 @@ nopz/
 ├── tests/
 │   ├── test_cli.py         # Unit tests for CLI and regulation loading
 │   ├── test_agent_tools.py # Unit tests for agent tool functions
-│   ├── test_beaurocrat.py  # Unit tests for the beaurocrat
+│   ├── test_bureaucrat.py  # Unit tests for the bureaucrat
 │   ├── test_runner.py      # Unit tests for the runner
 │   └── test_clerk.py       # Unit tests for the clerk
 ├── demos/
@@ -58,7 +58,7 @@ nopz/
 ## Architecture
 
 ### Regulation Loop (`runner.py`)
-- `Runner` orchestrates the clerk/beaurocrat cycle: Clerk makes changes, Beaurocrat validates, merge on pass (git mode) or retry on failure.
+- `Runner` orchestrates the clerk/bureaucrat cycle: Clerk makes changes, Bureaucrat validates, merge on pass (git mode) or retry on failure.
 - Failure context is carried between iterations so the Clerk knows what to fix.
 - Loop terminates when all regulations pass or max iterations / stuck limit is reached.
 
@@ -67,7 +67,7 @@ nopz/
 - Uses tool calling (`read_file`, `write_file`, `list_directory`, `execute_shell_command`) via the `llm` library's `conversation().chain()`.
 - Turn-limited (`--clerk-turns`, default 30) to prevent runaway agents.
 
-### Beaurocrat (`beaurocrat.py`)
+### Bureaucrat (`bureaucrat.py`)
 - Validates whether the codebase satisfies all regulations via deterministic `check()` functions.
 - Optionally supports LLM-based validation for subjective regulations.
 - Provides failure context back to the runner for the next iteration.
@@ -83,7 +83,7 @@ nopz/
 ### CLI (`cli.py`)
 - Entry point: `nopz.cli:main` (registered as `nopz` script in pyproject.toml)
 - Loads regulations from Python files via `load_regulations()` (dynamic import + `@regulation` decorator registry).
-- Supports `--clerk-model`, `--beaurocrat-model`, `--clerk-turns`, `--max-iterations`, `--stuck-limit`, `--output`, `--debug`, `--list-models`, `--mimo-server`, `--log-file`, `--no-git` flags.
+- Supports `--clerk-model`, `--bureaucrat-model`, `--clerk-turns`, `--max-iterations`, `--stuck-limit`, `--output`, `--debug`, `--list-models`, `--mimo-server`, `--log-file`, `--no-git` flags.
 
 ## Commands
 
@@ -116,7 +116,7 @@ uv run nopz --list-models
 
 ## Key Design Decisions
 
-- **Separated validation and action:** The Clerk (makes changes) and Beaurocrat (validates) are independent agents with different responsibilities. This prevents the agent from self-validating.
+- **Separated validation and action:** The Clerk (makes changes) and Bureaucrat (validates) are independent agents with different responsibilities. This prevents the agent from self-validating.
 - **Deterministic regulation checks:** Regulations define Python `check()` functions that run deterministically, not relying on LLM judgment for pass/fail.
 - **Failure context carries forward:** Failed regulation results are passed to the next Clerk iteration so it knows exactly what to fix.
 - **Git branch management:** Each iteration works on a branch (`nopz/N`). On success, changes are merged back. Disabled with `--no-git`.
@@ -139,4 +139,4 @@ GitHub Actions workflow (`.github/workflows/test.yml`):
 
 ## Current Status
 
-Early-stage (v0.1.0). Core clerk/beaurocrat loop and CLI are functional. Two demo apps exist (power_tracker, modal).
+Early-stage (v0.1.0). Core clerk/bureaucrat loop and CLI are functional. Two demo apps exist (power_tracker, modal).

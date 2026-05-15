@@ -13,7 +13,7 @@ Power Tracker is a web application that:
 
 ## NOPZ Regulations
 
-This application is governed by NOPZ regulations — Python functions that validate whether the codebase meets specific requirements. The NOPZ clerk makes changes, and the beaurocrat checks regulations. On success, changes merge automatically. On failure, the clerk retries with failure context.
+This application is governed by NOPZ regulations — Python functions that validate whether the codebase meets specific requirements. The NOPZ clerk makes changes, and the bureaucrat checks regulations. On success, changes merge automatically. On failure, the clerk retries with failure context.
 
 ### Regulation Files
 
@@ -48,4 +48,4 @@ The backend starts on port 8000. Open `http://localhost:8000` in your browser.
 
 ## Previous Runs
 
-The `runs/` directory contains outputs from earlier NOPZ agent runs, showing iterative progress toward satisfying all regulations. Each run represents a complete attempt by the clerk/beaurocrat cycle.
+The `runs/` directory contains outputs from earlier NOPZ agent runs, showing iterative progress toward satisfying all regulations. Each run represents a complete attempt by the clerk/bureaucrat cycle.
