@@ -102,9 +102,9 @@ def fastapi_framework():
 @regulation(
     "cors_middleware",
     description=(
-        "Backend must register CORS middleware on the application to allow "
-        "cross-origin requests. Scope: non-test Python source files. "
-        "Missing or unparseable files are skipped."
+        "Backend must allow cross-origin HTTP requests from any origin. "
+        "Scope: non-test Python source files. Missing or unparseable files "
+        "are skipped."
     ),
 )
 def cors_middleware():
@@ -125,10 +125,11 @@ def cors_middleware():
 @regulation(
     "person_model",
     description=(
-        "A Pydantic model must define annotated fields: id, name, title, "
-        "country_or_organization, and power_rank. The model must inherit from "
-        "BaseModel. Scope: non-test Python source files. Missing or unparseable "
-        "files are skipped."
+        "A Pydantic model must define annotated fields with types: "
+        "id (str or int), name (str), title (str), "
+        "country_or_organization (str), and power_rank (int or float). "
+        "The model must inherit from BaseModel. Scope: non-test Python "
+        "source files. Missing or unparseable files are skipped."
     ),
 )
 def person_model():
@@ -206,9 +207,8 @@ def activities_endpoint():
     "sse_endpoint",
     description=(
         "Backend must define an HTTP route that delivers real-time streaming "
-        "data (via SSE, streaming response, or WebSocket). The route path "
-        "must contain 'stream'. Scope: non-test Python source files. "
-        "Missing or unparseable files are skipped."
+        "data via SSE, streaming response, or WebSocket. Scope: non-test "
+        "Python source files. Missing or unparseable files are skipped."
     ),
 )
 def sse_endpoint():
@@ -225,10 +225,9 @@ def sse_endpoint():
 @regulation(
     "error_handling",
     description=(
-        "Backend must handle HTTP errors by raising exceptions with status "
-        "codes (e.g. 404, 422) or using a framework exception handler. "
-        "Scope: non-test Python source files. Missing or unparseable files "
-        "are skipped."
+        "Backend must handle HTTP errors and return appropriate status codes "
+        "for invalid requests. Scope: non-test Python source files. Missing "
+        "or unparseable files are skipped."
     ),
 )
 def error_handling():

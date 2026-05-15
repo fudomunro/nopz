@@ -211,7 +211,7 @@ def main():
             logging.error("Exiting. Please fix the regulations and try again.")
             sys.exit(1)
 
-        logging.info("Number One Point Zero: all regulations approved.")
+        logging.info("Number One Point Zero: all regulations approved. We kept it gray.")
 
     # Chdir to output directory so clerk/bureaucrat work there directly
     if args.output:

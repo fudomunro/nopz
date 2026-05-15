@@ -74,10 +74,9 @@ def seeds_10_people():
 @regulation(
     "thread_safe_storage",
     description=(
-        "Data store must use a concurrency-safe mechanism. Passing requires "
-        "at least one import of threading, asyncio, Lock, RLock, Semaphore, "
-        "or Queue. Scope: non-test Python source files. Missing or unparseable "
-        "files are skipped."
+        "Data store must be safe for concurrent access from multiple "
+        "threads or async tasks. Scope: non-test Python source files. "
+        "Missing or unparseable files are skipped."
     ),
 )
 def thread_safe_storage():
@@ -92,9 +91,8 @@ def thread_safe_storage():
 @regulation(
     "activity_generator",
     description=(
-        "A background routine must generate activity events in a recurring "
-        "loop. Passing requires a function that contains both a while-loop "
-        "and a call to sleep(). Scope: non-test Python source files. "
+        "A background routine must continuously generate activity events "
+        "at regular intervals. Scope: non-test Python source files. "
         "Missing or unparseable files are skipped."
     ),
 )
@@ -120,10 +118,9 @@ def activity_generator():
 @regulation(
     "activity_references_valid_person",
     description=(
-        "Generated activities must reference valid person_ids. The check "
-        "verifies that person_id selection uses random.choice() from a "
-        "collection. Scope: non-test Python source files. Missing or "
-        "unparseable files are skipped."
+        "Generated activities must reference valid person_ids that exist "
+        "in the data store. Scope: non-test Python source files. Missing "
+        "or unparseable files are skipped."
     ),
 )
 def activity_references_valid_person():
@@ -142,11 +139,9 @@ def activity_references_valid_person():
 @regulation(
     "activity_capped_at_100",
     description=(
-        "Data store must cap activity history at 100 entries using a FIFO "
-        "eviction strategy. Passing requires a comparison with the literal "
-        "100 or a variable containing 'max'/'cap'/'limit' combined with "
-        "'activit', or a slice with upper bound 100. Scope: non-test Python "
-        "source files. Missing or unparseable files are skipped."
+        "Data store must cap activity history at a maximum of 100 entries, "
+        "removing oldest entries when the limit is reached. Scope: non-test "
+        "Python source files. Missing or unparseable files are skipped."
     ),
 )
 def activity_capped_at_100():

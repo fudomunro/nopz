@@ -113,18 +113,18 @@ def live_activity_feed():
 @regulation(
     "fetches_people",
     description=(
-        "Frontend JavaScript or HTML must contain a call to a /people endpoint. "
-        "Passing requires the combined JS and HTML content to contain both "
-        "'fetch' and 'people'. Scope: all .js and .html files excluding "
+        "Frontend must retrieve data from a /people API endpoint on page "
+        "load. Passing requires any .js or .html file to contain the "
+        "substring '/people'. Scope: all .js and .html files excluding "
         "directories __pycache__, runs, .git, node_modules, and .venv. "
         "Missing or unreadable files are skipped."
     ),
 )
 def fetches_people():
     content = _combined_frontend_content()
-    if "fetch" in content and "people" in content:
+    if "/people" in content:
         return RegulationResult(passed=True, name="fetches_people", message="Fetches /people found")
-    return RegulationResult(passed=False, name="fetches_people", message="No fetch /people found")
+    return RegulationResult(passed=False, name="fetches_people", message="No /people endpoint call found")
 
 
 @regulation(
@@ -149,18 +149,17 @@ def sse_connection():
 @regulation(
     "reconnect_handling",
     description=(
-        "Frontend JavaScript must detect disconnections and retry the connection. "
-        "Passing requires the combined JS and HTML content (case-insensitive) "
-        "to contain at least one of 'reconnect', 'retry', or 'settimeout' AND "
-        "to contain 'error' together with at least one of 'close' or "
-        "'disconnect'. Scope: all .js and .html files excluding directories "
-        "__pycache__, runs, .git, node_modules, and .venv. Missing or "
-        "unreadable files are skipped."
+        "Frontend must detect disconnections and automatically retry the "
+        "connection. Passing requires at least one .js or .html file to "
+        "contain 'reconnect' or 'retry' AND to contain 'error' together "
+        "with 'close' or 'disconnect' (all case-insensitive). Scope: all "
+        ".js and .html files excluding directories __pycache__, runs, .git, "
+        "node_modules, and .venv. Missing or unreadable files are skipped."
     ),
 )
 def reconnect_handling():
     content = _combined_frontend_content().lower()
-    has_reconnect = "reconnect" in content or "retry" in content or "settimeout" in content
+    has_reconnect = "reconnect" in content or "retry" in content
     has_error_handling = "error" in content and ("close" in content or "disconnect" in content)
     if has_reconnect and has_error_handling:
         return RegulationResult(passed=True, name="reconnect_handling", message="Reconnect handling found")

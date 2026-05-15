@@ -177,9 +177,10 @@ def test_coverage():
 @regulation(
     "has_run_script",
     description=(
-        "Project must contain at least one application entry point file in the "
-        "working directory: run.sh, run.py, Makefile, justfile, docker-compose.yml, "
-        "or Dockerfile. The check passes if any of these files exist."
+        "Project must provide a way to run the application. The check passes "
+        "if the working directory contains any executable entry point file "
+        "(e.g. a shell script, Python script, Makefile, or container "
+        "configuration)."
     ),
 )
 def has_run_script():
