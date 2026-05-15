@@ -133,8 +133,24 @@ def activity_capped_at_100():
                 for comp_node in [node.left] + node.comparators:
                     if isinstance(comp_node, ast.Constant) and comp_node.value == 100:
                         return RegulationResult(passed=True, name="activity_capped_at_100", message="Activity cap at 100 found")
+                    # Also match a variable name implying a cap (e.g. MAX_ACTIVITIES)
+                    if isinstance(comp_node, ast.Name) and _is_cap_variable(comp_node.id):
+                        return RegulationResult(passed=True, name="activity_capped_at_100", message="Activity cap at 100 found")
             # Check for slicing with 100 (e.g. activities[-100:])
             if isinstance(node, ast.Slice):
                 if isinstance(node.upper, ast.Constant) and node.upper.value == 100:
                     return RegulationResult(passed=True, name="activity_capped_at_100", message="Activity cap at 100 found")
+                if isinstance(node.upper, ast.Name) and _is_cap_variable(node.upper.id):
+                    return RegulationResult(passed=True, name="activity_capped_at_100", message="Activity cap at 100 found")
     return RegulationResult(passed=False, name="activity_capped_at_100", message="No activity cap logic found")
+
+
+_CAP_KEYWORDS = {"max", "cap", "limit", "capped", "maxsize", "maxlen"}
+
+
+def _is_cap_variable(name: str) -> bool:
+    """Check if a variable name suggests a capacity/limit constant."""
+    lower = name.lower()
+    has_activity = "activit" in lower
+    has_cap = any(kw in lower for kw in _CAP_KEYWORDS)
+    return has_activity and has_cap

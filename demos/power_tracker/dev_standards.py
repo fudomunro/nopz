@@ -111,9 +111,10 @@ def has_requirements():
         "or patch with `side_effect` set to a real async function. "
         "If a task catches CancelledError internally, do not also catch it in the test — "
         "the task will complete normally. "
-        "SSE or streaming endpoints that block on asyncio.Event.wait() without a running "
-        "background task will hang tests. Use a test fixture that triggers FastAPI lifespan "
-        "events, or mock the event so the stream can yield."
+        "SSE or streaming endpoints that block on asyncio.Event.wait() or queue.get() "
+        "without a running background task will hang tests. httpx.ASGITransport does NOT "
+        "trigger FastAPI lifespan events. Use a conftest fixture that manually calls "
+        "lifespan startup/shutdown, or mock the blocking call so the stream can yield."
     ),
 )
 def test_coverage():
