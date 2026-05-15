@@ -17,14 +17,14 @@ def _find_python_files() -> list[str]:
     return files
 
 
-def _parse_all() -> list[ast.Module]:
-    """Parse all Python files and return their ASTs."""
+def _parse_all() -> list[tuple[str, ast.Module]]:
+    """Parse all Python files and return (path, AST) tuples."""
     trees = []
     for fpath in _find_python_files():
         try:
             with open(fpath) as f:
-                trees.append(ast.parse(f.read()))
-        except SyntaxError:
+                trees.append((fpath, ast.parse(f.read())))
+        except (SyntaxError, OSError, UnicodeDecodeError):
             pass
     return trees
 
@@ -80,17 +80,16 @@ def _route_paths(tree: ast.Module) -> list[str]:
 @regulation(
     "fastapi_framework",
     description=(
-        "Backend must define an ASGI application instance using a framework that "
-        "provides automatic request/response validation and OpenAPI documentation. "
-        "The check scans Python files for an import of 'fastapi' and a call to "
-        "FastAPI() that creates the application instance."
+        "Backend application must define an ASGI app instance that provides "
+        "automatic request/response validation and OpenAPI documentation. "
+        "Scope: non-test Python source files. Missing or unparseable files "
+        "are skipped."
     ),
 )
 def fastapi_framework():
-    for tree in _parse_all():
+    for _fpath, tree in _parse_all():
         names = _import_names(tree)
         if "fastapi" in names:
-            # Check for FastAPI() call
             for node in ast.walk(tree):
                 if isinstance(node, ast.Call):
                     func = node.func
@@ -103,18 +102,16 @@ def fastapi_framework():
 @regulation(
     "cors_middleware",
     description=(
-        "Backend must import CORSMiddleware and register it via add_middleware() "
-        "on the application instance to allow cross-origin requests. The check "
-        "scans Python files for 'CORSMiddleware' in imports or in an "
-        "add_middleware() call."
+        "Backend must register CORS middleware on the application to allow "
+        "cross-origin requests. Scope: non-test Python source files. "
+        "Missing or unparseable files are skipped."
     ),
 )
 def cors_middleware():
-    for tree in _parse_all():
+    for _fpath, tree in _parse_all():
         names = _import_names(tree)
         if "CORSMiddleware" in names:
             return RegulationResult(passed=True, name="cors_middleware", message="CORS middleware configured")
-        # Also check for add_middleware(CORSMiddleware, ...) pattern
         for node in ast.walk(tree):
             if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
                 if node.func.attr == "add_middleware":
@@ -128,15 +125,15 @@ def cors_middleware():
 @regulation(
     "person_model",
     description=(
-        "A Pydantic model class (inheriting from BaseModel) must define annotated "
-        "fields: id, name, title, country_or_organization, and power_rank. "
-        "The check uses AST parsing to find classes with BaseModel in their bases "
-        "and verifies all five field names are present as annotated assignments."
+        "A Pydantic model must define annotated fields: id, name, title, "
+        "country_or_organization, and power_rank. The model must inherit from "
+        "BaseModel. Scope: non-test Python source files. Missing or unparseable "
+        "files are skipped."
     ),
 )
 def person_model():
     required = {"id", "name", "title", "country_or_organization", "power_rank"}
-    for tree in _parse_all():
+    for _fpath, tree in _parse_all():
         for node in ast.walk(tree):
             if isinstance(node, ast.ClassDef):
                 bases = _base_class_names(node)
@@ -153,15 +150,15 @@ def person_model():
 @regulation(
     "activity_model",
     description=(
-        "A Pydantic model class (inheriting from BaseModel) must define annotated "
-        "fields: id, person_id, timestamp, location, and description. "
-        "The check uses AST parsing to find classes with BaseModel in their bases "
-        "and verifies all five field names are present as annotated assignments."
+        "A Pydantic model must define annotated fields: id, person_id, "
+        "timestamp, location, and description. The model must inherit from "
+        "BaseModel. Scope: non-test Python source files. Missing or unparseable "
+        "files are skipped."
     ),
 )
 def activity_model():
     required = {"id", "person_id", "timestamp", "location", "description"}
-    for tree in _parse_all():
+    for _fpath, tree in _parse_all():
         for node in ast.walk(tree):
             if isinstance(node, ast.ClassDef):
                 bases = _base_class_names(node)
@@ -175,85 +172,73 @@ def activity_model():
 @regulation(
     "people_endpoint",
     description=(
-        "Backend must define a route handler whose path contains '/people'. "
-        "The check uses AST parsing to scan all Python files for function "
-        "decorator arguments containing the substring '/people'."
+        "Backend must define an HTTP route handler whose path contains '/people'. "
+        "Scope: non-test Python source files. Missing or unparseable files "
+        "are skipped."
     ),
 )
 def people_endpoint():
-    try:
-        for tree in _parse_all():
-            for path in _route_paths(tree):
-                if "/people" in path:
-                    return RegulationResult(passed=True, name="people_endpoint", message="GET /people endpoint found")
-    except (OSError, SyntaxError) as e:
-        return RegulationResult(passed=False, name="people_endpoint", message=f"Check error: {e}")
+    for _fpath, tree in _parse_all():
+        for path in _route_paths(tree):
+            if "/people" in path:
+                return RegulationResult(passed=True, name="people_endpoint", message="GET /people endpoint found")
     return RegulationResult(passed=False, name="people_endpoint", message="GET /people endpoint not found")
 
 
 @regulation(
     "activities_endpoint",
     description=(
-        "Backend must define a route handler whose path contains both 'person_id' "
-        "and 'activit' (matching patterns like /people/{person_id}/activities). "
-        "The check uses AST parsing to scan all Python files for function "
-        "decorator arguments matching both substrings."
+        "Backend must define an HTTP route handler whose path contains both "
+        "'person_id' and 'activit' (e.g. /people/{person_id}/activities). "
+        "Scope: non-test Python source files. Missing or unparseable files "
+        "are skipped."
     ),
 )
 def activities_endpoint():
-    try:
-        for tree in _parse_all():
-            for path in _route_paths(tree):
-                if "person_id" in path and "activit" in path:
-                    return RegulationResult(passed=True, name="activities_endpoint", message="Activities endpoint found")
-    except (OSError, SyntaxError) as e:
-        return RegulationResult(passed=False, name="activities_endpoint", message=f"Check error: {e}")
+    for _fpath, tree in _parse_all():
+        for path in _route_paths(tree):
+            if "person_id" in path and "activit" in path:
+                return RegulationResult(passed=True, name="activities_endpoint", message="Activities endpoint found")
     return RegulationResult(passed=False, name="activities_endpoint", message="Activities endpoint not found")
 
 
 @regulation(
     "sse_endpoint",
     description=(
-        "Backend must define a streaming route handler that uses EventSourceResponse, "
-        "StreamingResponse, or WebSocket for real-time data delivery. "
-        "The check verifies that a Python file both imports one of these streaming "
-        "classes and defines a route whose path contains 'stream'."
+        "Backend must define an HTTP route that delivers real-time streaming "
+        "data (via SSE, streaming response, or WebSocket). The route path "
+        "must contain 'stream'. Scope: non-test Python source files. "
+        "Missing or unparseable files are skipped."
     ),
 )
 def sse_endpoint():
     sse_imports = {"EventSourceResponse", "StreamingResponse", "WebSocket"}
-    try:
-        for tree in _parse_all():
-            names = _import_names(tree)
-            if names & sse_imports:
-                for path in _route_paths(tree):
-                    if "stream" in path:
-                        return RegulationResult(passed=True, name="sse_endpoint", message="SSE/streaming endpoint found")
-    except (OSError, SyntaxError) as e:
-        return RegulationResult(passed=False, name="sse_endpoint", message=f"Check error: {e}")
+    for _fpath, tree in _parse_all():
+        names = _import_names(tree)
+        if names & sse_imports:
+            for path in _route_paths(tree):
+                if "stream" in path:
+                    return RegulationResult(passed=True, name="sse_endpoint", message="SSE/streaming endpoint found")
     return RegulationResult(passed=False, name="sse_endpoint", message="No SSE/streaming endpoint found")
 
 
 @regulation(
     "error_handling",
     description=(
-        "Backend must handle errors using HTTPException (imported from the web "
-        "framework) or by setting status_code on route decorators or response "
-        "objects. The check scans Python files for an 'HTTPException' import or "
-        "a keyword argument status_code=404 in any function call."
+        "Backend must handle HTTP errors by raising exceptions with status "
+        "codes (e.g. 404, 422) or using a framework exception handler. "
+        "Scope: non-test Python source files. Missing or unparseable files "
+        "are skipped."
     ),
 )
 def error_handling():
-    try:
-        for tree in _parse_all():
-            names = _import_names(tree)
-            if "HTTPException" in names:
-                return RegulationResult(passed=True, name="error_handling", message="Error handling found")
-            for node in ast.walk(tree):
-                if isinstance(node, ast.Call):
-                    for kw in node.keywords:
-                        if kw.arg == "status_code" and isinstance(kw.value, ast.Constant) and kw.value.value == 404:
-                            return RegulationResult(passed=True, name="error_handling", message="Error handling found")
-    except (OSError, SyntaxError) as e:
-        return RegulationResult(passed=False, name="error_handling", message=f"Check error: {e}")
+    for _fpath, tree in _parse_all():
+        names = _import_names(tree)
+        if "HTTPException" in names:
+            return RegulationResult(passed=True, name="error_handling", message="Error handling found")
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call):
+                for kw in node.keywords:
+                    if kw.arg == "status_code" and isinstance(kw.value, ast.Constant) and kw.value.value == 404:
+                        return RegulationResult(passed=True, name="error_handling", message="Error handling found")
     return RegulationResult(passed=False, name="error_handling", message="No HTTP error handling found")

@@ -37,7 +37,7 @@ def _read_all_html() -> str:
         try:
             with open(fpath) as f:
                 parts.append(f.read())
-        except Exception:
+        except (OSError, UnicodeDecodeError):
             pass
     return "\n".join(parts)
 
@@ -49,7 +49,7 @@ def _read_all_js() -> str:
         try:
             with open(fpath) as f:
                 parts.append(f.read())
-        except Exception:
+        except (OSError, UnicodeDecodeError):
             pass
     return "\n".join(parts)
 
@@ -61,7 +61,11 @@ def _combined_frontend_content() -> str:
 
 @regulation(
     "has_index_html",
-    description="Frontend entry point must be an index.html file.",
+    description=(
+        "Frontend must have an index.html file as the application entry point. "
+        "The check scans for any file named index.html, excluding directories "
+        "__pycache__, runs, .git, node_modules, and .venv."
+    ),
 )
 def has_index_html():
     exists = any(os.path.basename(f) == "index.html" for f in _find_html_files())
@@ -75,9 +79,11 @@ def has_index_html():
 @regulation(
     "people_display",
     description=(
-        "Frontend HTML must contain a visible section that displays people data. "
-        "The check reads all HTML files and passes if the combined content "
-        "contains the word 'people' or 'powerful' (case-insensitive)."
+        "Frontend HTML must contain a section that displays people data. "
+        "Passing requires the HTML content to contain the word 'people' or "
+        "'powerful' (case-insensitive). Scope: all HTML files excluding "
+        "directories __pycache__, runs, .git, node_modules, and .venv. "
+        "Missing or unreadable files are skipped."
     ),
 )
 def people_display():
@@ -90,10 +96,11 @@ def people_display():
 @regulation(
     "live_activity_feed",
     description=(
-        "Frontend HTML must contain a section for displaying real-time activity "
-        "events. The check reads all HTML files and passes if the combined content "
-        "contains the word 'activity' AND at least one of 'feed', 'stream', or "
-        "'live' (case-insensitive)."
+        "Frontend HTML must contain a section for real-time activity events. "
+        "Passing requires the HTML content to contain the word 'activity' AND "
+        "at least one of 'feed', 'stream', or 'live' (case-insensitive). "
+        "Scope: all HTML files excluding directories __pycache__, runs, .git, "
+        "node_modules, and .venv. Missing or unreadable files are skipped."
     ),
 )
 def live_activity_feed():
@@ -106,9 +113,11 @@ def live_activity_feed():
 @regulation(
     "fetches_people",
     description=(
-        "Frontend JavaScript or HTML must contain a fetch call to a /people "
-        "endpoint. The check reads all .js and .html files and passes if the "
-        "combined content contains both the substring 'fetch' and 'people'."
+        "Frontend JavaScript or HTML must contain a call to a /people endpoint. "
+        "Passing requires the combined JS and HTML content to contain both "
+        "'fetch' and 'people'. Scope: all .js and .html files excluding "
+        "directories __pycache__, runs, .git, node_modules, and .venv. "
+        "Missing or unreadable files are skipped."
     ),
 )
 def fetches_people():
@@ -121,10 +130,12 @@ def fetches_people():
 @regulation(
     "sse_connection",
     description=(
-        "Frontend JavaScript or HTML must establish a real-time connection using "
-        "the EventSource API, WebSocket API, or reference SSE. The check reads "
-        "all .js and .html files and passes if the combined content contains "
-        "'EventSource', 'WebSocket', or 'sse' (case-insensitive)."
+        "Frontend JavaScript or HTML must establish a real-time connection "
+        "(e.g. EventSource, WebSocket, or other streaming mechanism). Passing "
+        "requires the combined content to contain 'EventSource', 'WebSocket', "
+        "or 'sse' (case-insensitive). Scope: all .js and .html files excluding "
+        "directories __pycache__, runs, .git, node_modules, and .venv. "
+        "Missing or unreadable files are skipped."
     ),
 )
 def sse_connection():
@@ -138,11 +149,13 @@ def sse_connection():
 @regulation(
     "reconnect_handling",
     description=(
-        "Frontend JavaScript must implement connection retry logic. The check "
-        "reads all .js and .html files and passes if the combined content "
-        "(case-insensitive) contains at least one of 'reconnect', 'retry', or "
-        "'settimeout' AND contains 'error' together with at least one of 'close' "
-        "or 'disconnect'."
+        "Frontend JavaScript must detect disconnections and retry the connection. "
+        "Passing requires the combined JS and HTML content (case-insensitive) "
+        "to contain at least one of 'reconnect', 'retry', or 'settimeout' AND "
+        "to contain 'error' together with at least one of 'close' or "
+        "'disconnect'. Scope: all .js and .html files excluding directories "
+        "__pycache__, runs, .git, node_modules, and .venv. Missing or "
+        "unreadable files are skipped."
     ),
 )
 def reconnect_handling():
@@ -157,9 +170,11 @@ def reconnect_handling():
 @regulation(
     "status_indicator",
     description=(
-        "Frontend HTML must display connection status text. The check reads all "
-        "HTML files and passes if the combined content (case-insensitive) contains "
-        "at least one of: 'connected', 'disconnected', or 'connecting'."
+        "Frontend HTML must display the current connection state. Passing "
+        "requires the HTML content (case-insensitive) to contain at least "
+        "one of: 'connected', 'disconnected', or 'connecting'. Scope: all "
+        "HTML files excluding directories __pycache__, runs, .git, "
+        "node_modules, and .venv. Missing or unreadable files are skipped."
     ),
 )
 def status_indicator():
