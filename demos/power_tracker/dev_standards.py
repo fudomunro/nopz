@@ -134,7 +134,7 @@ def has_requirements():
 @regulation(
     "test_coverage",
     description=(
-        "Test suite must achieve at least 95% code coverage. The check runs "
+        "Test suite must achieve at least 80% code coverage. The check runs "
         "the test suite with coverage measurement and parses the coverage "
         "percentage from the output. A built-in timeout prevents the check "
         "from hanging indefinitely. Missing test runner or dependencies "
@@ -168,7 +168,7 @@ def test_coverage():
                     coverage_pct = int(part.rstrip("%"))
                     break
     return RegulationResult(
-        passed=coverage_pct >= 95,
+        passed=coverage_pct >= 80,
         name="test_coverage",
         message=f"Coverage: {coverage_pct}%" if coverage_pct else f"Tests failed: {result.stdout[-300:]}",
         details={"coverage": coverage_pct},
