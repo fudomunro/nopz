@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from nopz.agent import RunFinishedException
 from nopz.clerk import Clerk
 from nopz.regulations import Regulation, RegulationResult
 
@@ -117,3 +118,28 @@ def test_clerk_failure_context_in_prompt():
     assert "Previous validation FAILED" in prompt
     assert "reg_x" in prompt
     assert "broken" in prompt
+
+
+def test_clerk_finish_run_returns_early():
+    """When finish_run is called, the clerk returns early with the summary."""
+    c = Clerk(model="test-model")
+    mock_model = MagicMock()
+    mock_conversation = MagicMock()
+    mock_model.conversation.return_value = mock_conversation
+
+    # Simulate finish_run being called during chain iteration
+    def raise_finished(*args, **kwargs):
+        def gen():
+            raise RunFinishedException(True, "All regulations satisfied.", {"input": 100, "output": 50})
+            yield  # make it a generator
+        return gen()
+
+    mock_conversation.chain.side_effect = raise_finished
+
+    with patch("nopz.clerk.llm") as mock_llm:
+        mock_llm.get_model.return_value = mock_model
+        summary, usage = c.work([_make_reg("a")])
+
+    assert summary == "All regulations satisfied."
+    assert usage["input"] == 100
+    assert usage["output"] == 50

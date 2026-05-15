@@ -7,6 +7,7 @@ The runner coordinates the cycle:
 """
 
 import logging
+import os
 import re
 import subprocess
 from typing import Optional
@@ -87,6 +88,15 @@ class Runner:
         timeline: list[str] = []
         total_usage = {"input": 0, "output": 0}
         failure_context: Optional[list[RegulationResult]] = None
+
+        # Create a shadow pyproject.toml so tools like pytest don't walk up
+        # to a parent project's config and run the wrong test suite.
+        created_shadow = False
+        if not os.path.exists("pyproject.toml"):
+            with open("pyproject.toml", "w") as f:
+                f.write('[project]\nname = "nopz-output"\nversion = "0.0.0"\n')
+            created_shadow = True
+            logger.debug("Created shadow pyproject.toml to isolate tool config.")
         previous_failed: Optional[set[str]] = None
         consecutive_stuck = 0
 
@@ -150,6 +160,8 @@ class Runner:
                         f"Total Token Usage: Input: {total_usage['input']}, Output: {total_usage['output']}"
                     )
                     logger.info("You are technically correct. The BEST kind of correct.")
+                    if created_shadow:
+                        os.remove("pyproject.toml")
                     return True
 
                 # Validation failed — record failures for next iteration
@@ -196,4 +208,6 @@ class Runner:
         logger.info(
             f"Total Token Usage: Input: {total_usage['input']}, Output: {total_usage['output']}"
         )
+        if created_shadow:
+            os.remove("pyproject.toml")
         return False

@@ -13,8 +13,10 @@ from typing import Optional
 import llm
 
 from nopz.agent import (
+    RunFinishedException,
     _register_extra_model,
     execute_shell_command,
+    finish_run,
     list_directory,
     read_file,
     write_file,
@@ -82,7 +84,7 @@ class Clerk:
         if self.base_url:
             model.api_base = self.base_url
 
-        tools = [read_file, write_file, list_directory, execute_shell_command]
+        tools = [read_file, write_file, list_directory, execute_shell_command, finish_run]
 
         # Build the prompt
         regulations_text = "\n".join(
@@ -95,7 +97,8 @@ class Clerk:
             "You do NOT evaluate whether regulations are met — that is done by others.\n"
             "You simply make the changes you believe are needed.\n"
             "Use the provided tools to read files, write files, and execute commands.\n"
-            "When you have made all the changes you believe are necessary, stop.\n"
+            "When you have made all the changes you believe are necessary, call finish_run\n"
+            "to signal completion. Do NOT keep making changes after calling finish_run.\n"
         )
 
         prompt = "Regulations to satisfy:\n\n"
@@ -137,6 +140,16 @@ class Clerk:
             summary = "Clerk completed work."
             logger.info(summary)
             return summary, usage
+
+        except RunFinishedException as e:
+            usage = get_usage(response) if response is not None else {"input": 0, "output": 0}
+            total_usage = {"input": usage.get("input", 0), "output": usage.get("output", 0)}
+            # Merge with any usage from the exception itself
+            for key in ("input", "output"):
+                total_usage[key] += e.usage.get(key, 0)
+            summary = e.summary or "Clerk finished early."
+            logger.info(f"Clerk finished: {summary}")
+            return summary, total_usage
 
         except Exception as e:
             logger.error(f"Clerk error: {e}")

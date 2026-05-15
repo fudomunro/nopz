@@ -465,3 +465,65 @@ def test_git_branch_fallback_to_main(mock_git: MagicMock):
         use_git=True,
     )
     assert runner.run() is True
+
+
+@patch("nopz.runner._git")
+def test_shadow_pyproject_created_and_cleaned_up(mock_git: MagicMock, tmp_path):
+    """A shadow pyproject.toml is created when none exists and cleaned up after."""
+    regs = [_make_regulation("reg_a")]
+    pass_a = RegulationResult(passed=True, name="reg_a")
+
+    clerk = MagicMock(spec=Clerk)
+    clerk.work.return_value = ("Clerk completed work.", {"input": 10, "output": 5})
+    beaurocrat = MagicMock(spec=Beaurocrat)
+    beaurocrat.validate_all.return_value = [pass_a]
+    beaurocrat.all_passed.return_value = True
+
+    runner = Runner(
+        clerk=clerk,
+        beaurocrat=beaurocrat,
+        regulations=regs,
+        max_iterations=5,
+        use_git=False,
+    )
+
+    import os
+    original_cwd = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        assert not (tmp_path / "pyproject.toml").exists()
+        assert runner.run() is True
+        assert not (tmp_path / "pyproject.toml").exists()
+    finally:
+        os.chdir(original_cwd)
+
+
+@patch("nopz.runner._git")
+def test_shadow_pyproject_not_overwritten(mock_git: MagicMock, tmp_path):
+    """If pyproject.toml already exists, it is not overwritten or removed."""
+    regs = [_make_regulation("reg_a")]
+    pass_a = RegulationResult(passed=True, name="reg_a")
+
+    clerk = MagicMock(spec=Clerk)
+    clerk.work.return_value = ("Clerk completed work.", {"input": 10, "output": 5})
+    beaurocrat = MagicMock(spec=Beaurocrat)
+    beaurocrat.validate_all.return_value = [pass_a]
+    beaurocrat.all_passed.return_value = True
+
+    runner = Runner(
+        clerk=clerk,
+        beaurocrat=beaurocrat,
+        regulations=regs,
+        max_iterations=5,
+        use_git=False,
+    )
+
+    import os
+    original_cwd = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        (tmp_path / "pyproject.toml").write_text('[project]\nname = "real"\n')
+        assert runner.run() is True
+        assert (tmp_path / "pyproject.toml").read_text() == '[project]\nname = "real"\n'
+    finally:
+        os.chdir(original_cwd)
