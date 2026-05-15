@@ -42,7 +42,9 @@ def pep8_compliance():
     description=(
         "All Python functions and classes must have type annotations for "
         "arguments (except self/cls) and return values. Scope: all .py files "
-        "excluding directories __pycache__, runs, .git, node_modules, and .venv."
+        "excluding directories __pycache__, runs, .git, node_modules, and .venv. "
+        "The check parses each file's AST and skips files that are missing, "
+        "unreadable, or have syntax errors without raising exceptions."
     ),
 )
 def type_hints():
@@ -102,10 +104,11 @@ def no_print_statements():
     "has_requirements",
     description=(
         "Project must declare dependencies with pinned versions. The check "
-        "passes if requirements.txt exists with all non-comment, non-empty "
-        "lines containing '==' (e.g. 'flask==2.0.1'), or if pyproject.toml "
-        "exists with dependency strings containing '=='. Missing files "
-        "result in a clear failure."
+        "looks for requirements.txt or pyproject.toml in the project root "
+        "(current working directory). It passes if requirements.txt exists "
+        "with all non-comment, non-empty lines containing '==' (e.g. "
+        "'flask==2.0.1'), or if pyproject.toml exists with dependency "
+        "strings containing '=='. Missing files result in a clear failure."
     ),
 )
 def has_requirements():

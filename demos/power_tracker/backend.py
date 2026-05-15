@@ -229,12 +229,16 @@ def sse_endpoint():
         "Backend must handle HTTP errors by returning error responses with "
         "status codes such as 404 (Not Found) or 422 (Unprocessable Entity). "
         "The check passes if the code imports HTTPException or uses "
-        "status_code keyword arguments. Scope: non-test Python source files. "
-        "Missing or unparseable files are skipped."
+        "status_code keyword arguments. Scope: Python source files whose "
+        "basename does not start with 'test_' and that are not in a 'tests' "
+        "directory. Missing or unparseable files are skipped."
     ),
 )
 def error_handling():
     for _fpath, tree in _parse_all():
+        basename = os.path.basename(_fpath)
+        if basename.startswith("test_") or os.sep + "tests" + os.sep in _fpath:
+            continue
         names = _import_names(tree)
         if "HTTPException" in names:
             return RegulationResult(passed=True, name="error_handling", message="Error handling found")
