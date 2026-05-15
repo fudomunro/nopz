@@ -57,18 +57,26 @@ def type_hints():
 
 @regulation(
     "no_print_statements",
-    description="Use proper logging instead of print statements in library code.",
+    description=(
+        "No Python source file (excluding test files matching 'test_*' and "
+        "directories __pycache__, runs, .git, node_modules, .venv) may contain "
+        "print() calls. All output must use the logging module instead. "
+        "The check scans all .py files for un-commented print( occurrences."
+    ),
 )
 def no_print_statements():
     violations = []
     for fpath in _find_python_files():
         if "test_" in os.path.basename(fpath):
             continue
-        with open(fpath) as f:
-            for i, line in enumerate(f, 1):
-                stripped = line.strip()
-                if "print(" in stripped and not stripped.startswith("#"):
-                    violations.append(f"{fpath}:{i}")
+        try:
+            with open(fpath) as f:
+                for i, line in enumerate(f, 1):
+                    stripped = line.strip()
+                    if "print(" in stripped and not stripped.startswith("#"):
+                        violations.append(f"{fpath}:{i}")
+        except (OSError, UnicodeDecodeError):
+            continue
     return RegulationResult(
         passed=len(violations) == 0,
         name="no_print_statements",
@@ -103,18 +111,9 @@ def has_requirements():
 @regulation(
     "test_coverage",
     description=(
-        "Test coverage should exceed 95%. "
-        "All tests must complete quickly (under 30 seconds total). "
-        "When testing async code: never mock asyncio.sleep with AsyncMock — "
-        "it prevents CancelledError delivery and causes tests to hang forever. "
-        "Instead, use a real async helper like `async def fast_sleep(d): await asyncio.sleep(0)` "
-        "or patch with `side_effect` set to a real async function. "
-        "If a task catches CancelledError internally, do not also catch it in the test — "
-        "the task will complete normally. "
-        "SSE or streaming endpoints that block on asyncio.Event.wait() or queue.get() "
-        "without a running background task will hang tests. httpx.ASGITransport does NOT "
-        "trigger FastAPI lifespan events. Use a conftest fixture that manually calls "
-        "lifespan startup/shutdown, or mock the blocking call so the stream can yield."
+        "Test suite must achieve at least 95% code coverage measured by pytest --cov. "
+        "The check runs pytest with coverage reporting and parses the TOTAL line. "
+        "Tests must complete within 120 seconds or the check fails with a timeout."
     ),
 )
 def test_coverage():
@@ -159,7 +158,12 @@ def test_coverage():
 
 @regulation(
     "has_run_script",
-    description="There must be a simple way to run the application.",
+    description=(
+        "Project must contain at least one of the following files in the working "
+        "directory to serve as an application entry point: run.sh, run.py, Makefile, "
+        "justfile, docker-compose.yml, or Dockerfile. The check passes if any of "
+        "these files exist."
+    ),
 )
 def has_run_script():
     run_indicators = ["run.sh", "run.py", "Makefile", "justfile", "docker-compose.yml", "Dockerfile"]

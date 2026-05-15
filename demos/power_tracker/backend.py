@@ -79,7 +79,12 @@ def _route_paths(tree: ast.Module) -> list[str]:
 
 @regulation(
     "fastapi_framework",
-    description="Backend must use FastAPI with an app instance.",
+    description=(
+        "Backend must define an ASGI application instance using a framework that "
+        "provides automatic request/response validation and OpenAPI documentation. "
+        "The check scans Python files for an import of 'fastapi' and a call to "
+        "FastAPI() that creates the application instance."
+    ),
 )
 def fastapi_framework():
     for tree in _parse_all():
@@ -97,7 +102,12 @@ def fastapi_framework():
 
 @regulation(
     "cors_middleware",
-    description="CORS middleware must be configured.",
+    description=(
+        "Backend must import CORSMiddleware and register it via add_middleware() "
+        "on the application instance to allow cross-origin requests. The check "
+        "scans Python files for 'CORSMiddleware' in imports or in an "
+        "add_middleware() call."
+    ),
 )
 def cors_middleware():
     for tree in _parse_all():
@@ -117,7 +127,12 @@ def cors_middleware():
 
 @regulation(
     "person_model",
-    description="Pydantic Person model with id, name, title, country_or_organization, power_rank.",
+    description=(
+        "A Pydantic model class (inheriting from BaseModel) must define annotated "
+        "fields: id, name, title, country_or_organization, and power_rank. "
+        "The check uses AST parsing to find classes with BaseModel in their bases "
+        "and verifies all five field names are present as annotated assignments."
+    ),
 )
 def person_model():
     required = {"id", "name", "title", "country_or_organization", "power_rank"}
@@ -137,7 +152,12 @@ def person_model():
 
 @regulation(
     "activity_model",
-    description="Pydantic Activity model with id, person_id, timestamp, location, description.",
+    description=(
+        "A Pydantic model class (inheriting from BaseModel) must define annotated "
+        "fields: id, person_id, timestamp, location, and description. "
+        "The check uses AST parsing to find classes with BaseModel in their bases "
+        "and verifies all five field names are present as annotated assignments."
+    ),
 )
 def activity_model():
     required = {"id", "person_id", "timestamp", "location", "description"}
@@ -154,56 +174,86 @@ def activity_model():
 
 @regulation(
     "people_endpoint",
-    description="GET /people returns list of people ordered by power_rank.",
+    description=(
+        "Backend must define a route handler whose path contains '/people'. "
+        "The check uses AST parsing to scan all Python files for function "
+        "decorator arguments containing the substring '/people'."
+    ),
 )
 def people_endpoint():
-    for tree in _parse_all():
-        for path in _route_paths(tree):
-            if "/people" in path:
-                return RegulationResult(passed=True, name="people_endpoint", message="GET /people endpoint found")
+    try:
+        for tree in _parse_all():
+            for path in _route_paths(tree):
+                if "/people" in path:
+                    return RegulationResult(passed=True, name="people_endpoint", message="GET /people endpoint found")
+    except (OSError, SyntaxError) as e:
+        return RegulationResult(passed=False, name="people_endpoint", message=f"Check error: {e}")
     return RegulationResult(passed=False, name="people_endpoint", message="GET /people endpoint not found")
 
 
 @regulation(
     "activities_endpoint",
-    description="GET /people/{person_id}/activities returns activities for a person.",
+    description=(
+        "Backend must define a route handler whose path contains both 'person_id' "
+        "and 'activit' (matching patterns like /people/{person_id}/activities). "
+        "The check uses AST parsing to scan all Python files for function "
+        "decorator arguments matching both substrings."
+    ),
 )
 def activities_endpoint():
-    for tree in _parse_all():
-        for path in _route_paths(tree):
-            if "person_id" in path and "activit" in path:
-                return RegulationResult(passed=True, name="activities_endpoint", message="Activities endpoint found")
+    try:
+        for tree in _parse_all():
+            for path in _route_paths(tree):
+                if "person_id" in path and "activit" in path:
+                    return RegulationResult(passed=True, name="activities_endpoint", message="Activities endpoint found")
+    except (OSError, SyntaxError) as e:
+        return RegulationResult(passed=False, name="activities_endpoint", message=f"Check error: {e}")
     return RegulationResult(passed=False, name="activities_endpoint", message="Activities endpoint not found")
 
 
 @regulation(
     "sse_endpoint",
-    description="GET /activities/stream provides SSE or WebSocket for real-time updates.",
+    description=(
+        "Backend must define a streaming route handler that uses EventSourceResponse, "
+        "StreamingResponse, or WebSocket for real-time data delivery. "
+        "The check verifies that a Python file both imports one of these streaming "
+        "classes and defines a route whose path contains 'stream'."
+    ),
 )
 def sse_endpoint():
     sse_imports = {"EventSourceResponse", "StreamingResponse", "WebSocket"}
-    for tree in _parse_all():
-        names = _import_names(tree)
-        if names & sse_imports:
-            for path in _route_paths(tree):
-                if "stream" in path:
-                    return RegulationResult(passed=True, name="sse_endpoint", message="SSE/streaming endpoint found")
+    try:
+        for tree in _parse_all():
+            names = _import_names(tree)
+            if names & sse_imports:
+                for path in _route_paths(tree):
+                    if "stream" in path:
+                        return RegulationResult(passed=True, name="sse_endpoint", message="SSE/streaming endpoint found")
+    except (OSError, SyntaxError) as e:
+        return RegulationResult(passed=False, name="sse_endpoint", message=f"Check error: {e}")
     return RegulationResult(passed=False, name="sse_endpoint", message="No SSE/streaming endpoint found")
 
 
 @regulation(
     "error_handling",
-    description="Standard HTTP status codes and clear error messages.",
+    description=(
+        "Backend must handle errors using HTTPException (imported from the web "
+        "framework) or by setting status_code on route decorators or response "
+        "objects. The check scans Python files for an 'HTTPException' import or "
+        "a keyword argument status_code=404 in any function call."
+    ),
 )
 def error_handling():
-    for tree in _parse_all():
-        names = _import_names(tree)
-        if "HTTPException" in names:
-            return RegulationResult(passed=True, name="error_handling", message="Error handling found")
-        # Check for status_code=404 in route decorators or raises
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Call):
-                for kw in node.keywords:
-                    if kw.arg == "status_code" and isinstance(kw.value, ast.Constant) and kw.value.value == 404:
-                        return RegulationResult(passed=True, name="error_handling", message="Error handling found")
+    try:
+        for tree in _parse_all():
+            names = _import_names(tree)
+            if "HTTPException" in names:
+                return RegulationResult(passed=True, name="error_handling", message="Error handling found")
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Call):
+                    for kw in node.keywords:
+                        if kw.arg == "status_code" and isinstance(kw.value, ast.Constant) and kw.value.value == 404:
+                            return RegulationResult(passed=True, name="error_handling", message="Error handling found")
+    except (OSError, SyntaxError) as e:
+        return RegulationResult(passed=False, name="error_handling", message=f"Check error: {e}")
     return RegulationResult(passed=False, name="error_handling", message="No HTTP error handling found")

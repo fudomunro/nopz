@@ -74,7 +74,11 @@ def has_index_html():
 
 @regulation(
     "people_display",
-    description="UI displays the top 10 people with name, title, and country_or_organization.",
+    description=(
+        "Frontend HTML must contain a visible section that displays people data. "
+        "The check reads all HTML files and passes if the combined content "
+        "contains the word 'people' or 'powerful' (case-insensitive)."
+    ),
 )
 def people_display():
     html = _read_all_html().lower()
@@ -85,7 +89,12 @@ def people_display():
 
 @regulation(
     "live_activity_feed",
-    description="UI has a distinct Live Activity Feed section.",
+    description=(
+        "Frontend HTML must contain a section for displaying real-time activity "
+        "events. The check reads all HTML files and passes if the combined content "
+        "contains the word 'activity' AND at least one of 'feed', 'stream', or "
+        "'live' (case-insensitive)."
+    ),
 )
 def live_activity_feed():
     html = _read_all_html().lower()
@@ -96,7 +105,11 @@ def live_activity_feed():
 
 @regulation(
     "fetches_people",
-    description="Frontend fetches people from GET /people on load.",
+    description=(
+        "Frontend JavaScript or HTML must contain a fetch call to a /people "
+        "endpoint. The check reads all .js and .html files and passes if the "
+        "combined content contains both the substring 'fetch' and 'people'."
+    ),
 )
 def fetches_people():
     content = _combined_frontend_content()
@@ -107,7 +120,12 @@ def fetches_people():
 
 @regulation(
     "sse_connection",
-    description="Frontend connects to real-time endpoint (SSE or WebSocket).",
+    description=(
+        "Frontend JavaScript or HTML must establish a real-time connection using "
+        "the EventSource API, WebSocket API, or reference SSE. The check reads "
+        "all .js and .html files and passes if the combined content contains "
+        "'EventSource', 'WebSocket', or 'sse' (case-insensitive)."
+    ),
 )
 def sse_connection():
     content = _combined_frontend_content()
@@ -119,7 +137,13 @@ def sse_connection():
 
 @regulation(
     "reconnect_handling",
-    description="UI gracefully handles connection drops and attempts to reconnect.",
+    description=(
+        "Frontend JavaScript must implement connection retry logic. The check "
+        "reads all .js and .html files and passes if the combined content "
+        "(case-insensitive) contains at least one of 'reconnect', 'retry', or "
+        "'settimeout' AND contains 'error' together with at least one of 'close' "
+        "or 'disconnect'."
+    ),
 )
 def reconnect_handling():
     content = _combined_frontend_content().lower()
@@ -132,7 +156,11 @@ def reconnect_handling():
 
 @regulation(
     "status_indicator",
-    description="UI shows connection status (Connected/Disconnected/Connecting).",
+    description=(
+        "Frontend HTML must display connection status text. The check reads all "
+        "HTML files and passes if the combined content (case-insensitive) contains "
+        "at least one of: 'connected', 'disconnected', or 'connecting'."
+    ),
 )
 def status_indicator():
     html = _read_all_html().lower()
