@@ -36,16 +36,12 @@ uv run nopz backend.py --output ./runs/my_run --clerk-model gemini-2.5-pro
 
 ## Running the Application
 
-The most complete implementation is in `runs/power_tracker_12/power_tracker/`:
+After running NOPZ, the generated app will be in your output directory. To run it:
 
 ```bash
-cd runs/power_tracker_12/power_tracker
+cd <your-output-dir>/power_tracker
 pip install -r requirements.txt
 ./run.sh
 ```
 
 The backend starts on port 8000. Open `http://localhost:8000` in your browser.
-
-## Previous Runs
-
-The `runs/` directory contains outputs from earlier NOPZ agent runs, showing iterative progress toward satisfying all regulations. Each run represents a complete attempt by the clerk/bureaucrat cycle.

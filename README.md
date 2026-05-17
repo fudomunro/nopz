@@ -170,10 +170,10 @@ By default, NOPZ manages git branches for each iteration (`nopz/1`, `nopz/2`, ..
 
 ## Demos
 
-The `demos/` directory contains example regulation sets and NOPZ run outputs:
+The `demos/` directory contains example regulation sets:
 
-- **`demos/power_tracker/`** — A FastAPI + SPA app with regulations covering backend architecture, frontend patterns, data handling, and development standards. Includes multiple run outputs showing iterative progress.
-- **`demos/modal/`** — Modal deployment demo.
+- **`demos/power_tracker/`** — A FastAPI + SPA app with regulations covering backend architecture, frontend patterns, data handling, and development standards.
+- **`demos/modal/`** — A minimal demo: a web page with a button that opens a modal dialog.
 
 ## Roadmap
 
