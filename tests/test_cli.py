@@ -252,7 +252,7 @@ def test_main_review_passes_continues(tmp_path: Path):
         mock_run.assert_called_once()
 
 
-def test_main_review_fails_exits(tmp_path: Path):
+def test_main_review_fails_drops_to_chat(tmp_path: Path):
     test_file = tmp_path / "regs.py"
     test_file.write_text(
         'from nopz.regulations import regulation, RegulationResult\n\n'
@@ -266,10 +266,12 @@ def test_main_review_fails_exits(tmp_path: Path):
     with (
         patch("sys.argv", ["nopz", str(test_file)]),
         patch("nopz.number_one.NumberOne.review", return_value=fail_results),
+        patch("nopz.chat.ChatAgent.run") as mock_chat_run,
         pytest.raises(SystemExit) as excinfo,
     ):
         main()
     assert excinfo.value.code == 1
+    mock_chat_run.assert_called_once()
 
 
 def test_main_nopz_model_flag(tmp_path: Path):
