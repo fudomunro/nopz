@@ -11,6 +11,7 @@ import sys
 from pathlib import Path
 
 from nopz.bureaucrat import Bureaucrat
+from nopz.chat import ChatAgent
 from nopz.clerk import Clerk
 from nopz.llm_compat import patch_reasoning_content
 from nopz.number_one import NumberOne, load_guidelines
@@ -56,8 +57,14 @@ def main():
     )
     parser.add_argument(
         "regulations_files",
-        nargs="+",
-        help="Path(s) to Python file(s) defining regulations with @regulation.",
+        nargs="*",
+        help="Path(s) to Python file(s) defining regulations with @regulation. "
+        "If omitted, enters interactive chat mode.",
+    )
+    parser.add_argument(
+        "--chat",
+        action="store_true",
+        help="Enter interactive chat mode with Number One Point Zero.",
     )
     parser.add_argument(
         "--clerk-model",
@@ -172,6 +179,30 @@ def main():
             print(f"  - {m.model_id}")
         sys.exit(0)
 
+    # --- Chat mode ---
+    if not args.regulations_files or args.chat:
+        if args.output:
+            os.chdir(args.output)
+
+        try:
+            guidelines = load_guidelines(args.guidelines)
+        except FileNotFoundError as e:
+            logging.error(str(e))
+            sys.exit(1)
+
+        chat_model = args.nopz_model or args.clerk_model
+        chat_agent = ChatAgent(
+            model_name=chat_model,
+            base_url=args.mimo_server,
+            guidelines=guidelines,
+            max_turns=args.clerk_turns,
+        )
+        try:
+            chat_agent.run()
+        except KeyboardInterrupt:
+            logging.info("Interrupted by user.")
+        sys.exit(0)
+
     # Load regulations from all files
     regulations = []
     for file_path in args.regulations_files:
@@ -202,13 +233,34 @@ def main():
         review_results = number_one.review(regulations)
 
         if not number_one.all_passed(review_results):
-            logging.error("Regulation review FAILED. Fix the following issues:\n")
+            # Build failure context for chat
+            lines = ["Regulation review FAILED. Issues found:\n"]
             for result in number_one.failures(review_results):
-                logging.error(f"  Regulation: {result.regulation_name}")
+                lines.append(f"  Regulation: {result.regulation_name}")
                 for issue in result.issues:
-                    logging.error(f"    - {issue}")
-                logging.error("")
-            logging.error("Exiting. Please fix the regulations and try again.")
+                    lines.append(f"    - {issue}")
+                lines.append("")
+            lines.append(
+                "Fix these regulation issues. The regulation files are:\n"
+                + "\n".join(f"  - {f}" for f in args.regulations_files)
+            )
+            failure_context = "\n".join(lines)
+
+            logging.error(failure_context)
+
+            # Drop into chat to debug
+            chat_model = args.nopz_model or args.clerk_model
+            chat_agent = ChatAgent(
+                model_name=chat_model,
+                base_url=args.mimo_server,
+                guidelines=guidelines,
+                max_turns=args.clerk_turns,
+                initial_context=failure_context,
+            )
+            try:
+                chat_agent.run()
+            except KeyboardInterrupt:
+                logging.info("Interrupted by user.")
             sys.exit(1)
 
         logging.info("Number One Point Zero: all regulations approved. We kept it gray.")
