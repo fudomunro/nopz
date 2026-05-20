@@ -335,3 +335,59 @@ def test_main_guidelines_missing_file_exits(tmp_path: Path):
     ):
         main()
     assert excinfo.value.code == 1
+
+
+# --- Validate-only mode tests ---
+
+
+def test_main_validate_only_all_pass(tmp_path: Path):
+    test_file = tmp_path / "regs.py"
+    test_file.write_text(
+        'from nopz.regulations import regulation, RegulationResult\n\n'
+        '@regulation("r")\n'
+        'def r():\n'
+        '    return RegulationResult(passed=True, name="r")\n'
+    )
+
+    with (
+        patch("sys.argv", ["nopz", str(test_file), "--validate-only", "--skip-review"]),
+        pytest.raises(SystemExit) as excinfo,
+    ):
+        main()
+    assert excinfo.value.code == 0
+
+
+def test_main_validate_only_failures(tmp_path: Path):
+    test_file = tmp_path / "regs.py"
+    test_file.write_text(
+        'from nopz.regulations import regulation, RegulationResult\n\n'
+        '@regulation("r")\n'
+        'def r():\n'
+        '    return RegulationResult(passed=False, name="r", message="nope")\n'
+    )
+
+    with (
+        patch("sys.argv", ["nopz", str(test_file), "--validate-only", "--skip-review"]),
+        pytest.raises(SystemExit) as excinfo,
+    ):
+        main()
+    assert excinfo.value.code == 1
+
+
+def test_main_validate_only_skips_runner(tmp_path: Path):
+    test_file = tmp_path / "regs.py"
+    test_file.write_text(
+        'from nopz.regulations import regulation, RegulationResult\n\n'
+        '@regulation("r")\n'
+        'def r():\n'
+        '    return RegulationResult(passed=True, name="r")\n'
+    )
+
+    with (
+        patch("sys.argv", ["nopz", str(test_file), "--validate-only", "--skip-review"]),
+        patch("nopz.cli.Runner") as mock_runner,
+        pytest.raises(SystemExit) as excinfo,
+    ):
+        main()
+    assert excinfo.value.code == 0
+    mock_runner.assert_not_called()
