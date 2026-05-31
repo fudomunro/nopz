@@ -150,6 +150,11 @@ def main():
         action="store_true",
         help="Disable caching of Number One regulation review results.",
     )
+    parser.add_argument(
+        "--validate-only",
+        action="store_true",
+        help="Run regulation checks and report results without making changes (no Clerk).",
+    )
 
     args = parser.parse_args()
 
@@ -268,6 +273,18 @@ def main():
     # Chdir to output directory so clerk/bureaucrat work there directly
     if args.output:
         os.chdir(args.output)
+
+    # --- Validate-only mode ---
+    if args.validate_only:
+        bureaucrat = Bureaucrat(regulations=regulations)
+        results = bureaucrat.validate_all()
+        for r in results:
+            status = "PASS" if r.passed else "FAIL"
+            print(f"  {status}  {r.name}: {r.message}")
+        passed = sum(1 for r in results if r.passed)
+        total = len(results)
+        print(f"\n{passed}/{total} regulations passed.")
+        sys.exit(0 if bureaucrat.all_passed(results) else 1)
 
     # Build components
     clerk = Clerk(
